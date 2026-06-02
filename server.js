@@ -255,6 +255,57 @@ async function syncDatabaseToDrive() {
   }
 }
 
+let lastDriveCheckTime = 0;
+const CHECK_INTERVAL_MS = 20000; // Check for updates at most once every 20 seconds to keep it very responsive yet light
+
+async function checkAndPullDatabaseFromDrive() {
+  if (!drive || !driveFolderId || isLocalGDriveActive) return;
+
+  const now = Date.now();
+  if (now - lastDriveCheckTime < CHECK_INTERVAL_MS) {
+    return;
+  }
+  lastDriveCheckTime = now;
+
+  try {
+    const response = await drive.files.list({
+      q: `name = 'playlist.json' and '${driveFolderId}' in parents and trashed = false`,
+      fields: 'files(id, modifiedTime)',
+      spaces: 'drive'
+    });
+    const files = response.data.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      const driveModifiedTime = new Date(file.modifiedTime).getTime();
+
+      let localModifiedTime = 0;
+      if (fs.existsSync(dbPath)) {
+        const stats = fs.statSync(dbPath);
+        localModifiedTime = stats.mtime.getTime();
+      }
+
+      // If the file on Google Drive is newer, download it dynamically!
+      if (driveModifiedTime > localModifiedTime + 2000) {
+        console.log('📥 Found newer playlist database on Google Drive. Pulling updates dynamically...');
+        const dest = fs.createWriteStream(dbPath);
+        const resStream = await drive.files.get(
+          { fileId: file.id, alt: 'media' },
+          { responseType: 'stream' }
+        );
+        await new Promise((resolve, reject) => {
+          resStream.data
+            .on('end', resolve)
+            .on('error', reject)
+            .pipe(dest);
+        });
+        console.log('📥 Local database successfully synced with Google Drive.');
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error checking database update on Drive:', error);
+  }
+}
+
 // Unified proxy streaming route for local files & Google Drive API
 app.get('/uploads/:filename', async (req, res) => {
   const { filename } = req.params;
@@ -441,7 +492,10 @@ const upload = multer({ storage, fileFilter });
 // API Endpoints
 
 // 1. Get playlist
-app.get('/api/playlist', (req, res) => {
+app.get('/api/playlist', async (req, res) => {
+  if (drive && !isLocalGDriveActive) {
+    await checkAndPullDatabaseFromDrive();
+  }
   const playlist = readDatabase();
   // Sort by 'order' property ascending
   playlist.sort((a, b) => a.order - b.order);
