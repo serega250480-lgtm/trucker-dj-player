@@ -1,0 +1,14 @@
+# Node.js temporary files
+node_modules/
+client/node_modules/
+
+# Compiled production front-end assets
+client/dist/
+
+# Local media uploads & database state
+uploads/
+database/
+
+# OS specific files
+.DS_Store
+Thumbs.db
