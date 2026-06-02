@@ -999,12 +999,20 @@ body {
   background: white;
   padding: 10px;
   border-radius: 6px;
-  box-shadow: 
-    0 6px 16px rgba(0,0,0,0.65),
-    border 3px solid #333;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.65);
+  border: 2px solid #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.qr-code-bezel.cloud-qr {
+  background: #0f0a05;
+  border: 2px solid #4a3e35;
+  box-shadow: 
+    0 6px 20px rgba(0, 0, 0, 0.85),
+    inset 0 0 10px rgba(255, 210, 148, 0.15);
 }
 
 .qr-code-img {
