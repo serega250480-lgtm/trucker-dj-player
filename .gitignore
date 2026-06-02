@@ -12,3 +12,6 @@ database/
 # OS specific files
 .DS_Store
 Thumbs.db
+
+# Google API Credentials
+google-credentials.json

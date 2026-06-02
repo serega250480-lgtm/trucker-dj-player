@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { triggerTactileFeedback } from '../utils/tactile';
 
 export default function ShareModal({ onClose, shareDetails }) {
   const [copied, setCopied] = useState(false);
@@ -20,7 +21,14 @@ export default function ShareModal({ onClose, shareDetails }) {
       >
         <div className="modal-header">
           <div className="modal-title">СИНХРОНІЗАЦІЯ З ТЕЛЕФОНОМ</div>
-          <button className="song-action-btn delete" onClick={onClose} style={{ fontSize: '18px' }}>
+          <button 
+            className="song-action-btn delete" 
+            onClick={() => {
+              triggerTactileFeedback('button_press');
+              onClose();
+            }} 
+            style={{ fontSize: '18px' }}
+          >
             ✕
           </button>
         </div>
@@ -51,7 +59,14 @@ export default function ShareModal({ onClose, shareDetails }) {
                 value={shareDetails.url} 
                 className="share-url-input"
               />
-              <button className="industrial-btn" onClick={handleCopy} style={{ padding: '10px 14px', fontSize: '11px' }}>
+              <button 
+                className="industrial-btn" 
+                onClick={() => {
+                  triggerTactileFeedback('button_press');
+                  handleCopy();
+                }} 
+                style={{ padding: '10px 14px', fontSize: '11px' }}
+              >
                 {copied ? 'КОПІЯ' : 'КЛІК'}
               </button>
             </div>
@@ -59,7 +74,10 @@ export default function ShareModal({ onClose, shareDetails }) {
           
           <button 
             className="industrial-btn" 
-            onClick={onClose}
+            onClick={() => {
+              triggerTactileFeedback('button_press');
+              onClose();
+            }}
             style={{ width: '100%', marginTop: '8px' }}
           >
             ГОТОВО

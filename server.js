@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const QRCode = require('qrcode');
 const mm = require('music-metadata');
+const { google } = require('googleapis');
 
 const app = express();
 const PORT = process.env.PORT || 3080;
@@ -17,18 +18,19 @@ app.use(express.json());
 // Setup Uploads Directory (Google Drive integration with safe fallback)
 const googleDriveBase = 'G:\\Мій диск';
 const googleDrivePlaylist = path.join(googleDriveBase, 'road_dj_playlist');
-let uploadsDir;
+let uploadsDir = path.join(__dirname, 'uploads');
+let isLocalGDriveActive = false;
 
 if (fs.existsSync(googleDriveBase)) {
   uploadsDir = googleDrivePlaylist;
+  isLocalGDriveActive = true;
   console.log(`====================================================`);
-  console.log(` ☁️  Google Drive cloud-sync ACTIVE!`);
+  console.log(` ☁️  Google Drive local-sync ACTIVE!`);
   console.log(` Path: ${uploadsDir}`);
   console.log(`====================================================`);
 } else {
-  uploadsDir = path.join(__dirname, 'uploads');
   console.log(`====================================================`);
-  console.log(` ⚠️  Google Drive not found. Using local directory.`);
+  console.log(` ⚠️  Local G: drive not found. Using local uploads directory.`);
   console.log(` Path: ${uploadsDir}`);
   console.log(`====================================================`);
 }
@@ -47,11 +49,328 @@ if (!fs.existsSync(dbPath)) {
   fs.writeFileSync(dbPath, JSON.stringify([]));
 }
 
-// Serve uploaded audio files
-app.use('/uploads', express.static(uploadsDir));
+// Google Drive API State
+let drive = null;
+let driveFolderId = null;
+
+// Initialize Google Drive API Client
+async function initGoogleDrive() {
+  try {
+    let auth = null;
+    const credsPath = path.join(__dirname, 'google-credentials.json');
+
+    if (fs.existsSync(credsPath)) {
+      console.log('🗝️  Using local google-credentials.json for Google API authentication.');
+      auth = new google.auth.GoogleAuth({
+        keyFile: credsPath,
+        scopes: ['https://www.googleapis.com/auth/drive'],
+      });
+    } else if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+      console.log('🗝️  Using environment variables for Google API authentication.');
+      const privateKey = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+      auth = new google.auth.JWT(
+        process.env.GOOGLE_CLIENT_EMAIL,
+        null,
+        privateKey,
+        ['https://www.googleapis.com/auth/drive']
+      );
+    }
+
+    if (!auth) {
+      console.log('⚠️  No Google Drive API credentials found. Google Drive API integration is INACTIVE.');
+      return false;
+    }
+
+    drive = google.drive({ version: 'v3', auth });
+
+    // Resolve or create the folder
+    driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    if (!driveFolderId) {
+      console.log('🔍 GOOGLE_DRIVE_FOLDER_ID not set. Searching for folder "road_dj_playlist" on Google Drive...');
+      const response = await drive.files.list({
+        q: "mimeType = 'application/vnd.google-apps.folder' and name = 'road_dj_playlist' and trashed = false",
+        fields: 'files(id, name)',
+        spaces: 'drive'
+      });
+      const folders = response.data.files;
+      if (folders && folders.length > 0) {
+        driveFolderId = folders[0].id;
+        console.log(`📁 Found existing Google Drive folder "road_dj_playlist" with ID: ${driveFolderId}`);
+      } else {
+        console.log('📁 Folder "road_dj_playlist" not found. Creating a new one...');
+        const folderMetadata = {
+          name: 'road_dj_playlist',
+          mimeType: 'application/vnd.google-apps.folder'
+        };
+        const folder = await drive.files.create({
+          resource: folderMetadata,
+          fields: 'id'
+        });
+        driveFolderId = folder.data.id;
+        console.log(`📁 Created new Google Drive folder "road_dj_playlist" with ID: ${driveFolderId}`);
+      }
+    } else {
+      console.log(`📁 Using configured GOOGLE_DRIVE_FOLDER_ID: ${driveFolderId}`);
+    }
+
+    // Bidirectional sync: check if playlist.json exists on Drive
+    if (!isLocalGDriveActive) {
+      console.log('🔄 Checking for playlist.json on Google Drive...');
+      const dbResponse = await drive.files.list({
+        q: `name = 'playlist.json' and '${driveFolderId}' in parents and trashed = false`,
+        fields: 'files(id, name)',
+        spaces: 'drive'
+      });
+      const dbFiles = dbResponse.data.files;
+
+      if (dbFiles && dbFiles.length > 0) {
+        const fileId = dbFiles[0].id;
+        console.log(`📥 Downloading master playlist.json from Google Drive (ID: ${fileId})...`);
+        const dest = fs.createWriteStream(dbPath);
+        const resStream = await drive.files.get(
+          { fileId: fileId, alt: 'media' },
+          { responseType: 'stream' }
+        );
+        await new Promise((resolve, reject) => {
+          resStream.data
+            .on('end', () => {
+              console.log('📥 Successfully synchronized database from Google Drive.');
+              resolve();
+            })
+            .on('error', err => {
+              console.error('❌ Error downloading database stream:', err);
+              reject(err);
+            })
+            .pipe(dest);
+        });
+      } else {
+        console.log('📤 playlist.json not found on Google Drive. Initializing by uploading local database...');
+        await syncDatabaseToDrive();
+      }
+    } else {
+      console.log('🔄 Local G: drive is active. Skipping Google Drive API database sync (local client handles it).');
+    }
+
+    return true;
+  } catch (error) {
+    console.error('❌ Error during Google Drive API initialization:', error);
+    drive = null;
+    return false;
+  }
+}
+
+// Upload local file to Google Drive
+async function uploadFileToDrive(filePath, filename, mimeType) {
+  if (!drive || !driveFolderId) {
+    throw new Error('Google Drive client is not initialized');
+  }
+  console.log(`📤 Uploading file to Google Drive: ${filename} (${mimeType})...`);
+  const fileMetadata = {
+    name: filename,
+    parents: [driveFolderId]
+  };
+  const media = {
+    mimeType: mimeType,
+    body: fs.createReadStream(filePath)
+  };
+  const response = await drive.files.create({
+    resource: fileMetadata,
+    media: media,
+    fields: 'id'
+  });
+  console.log(`📤 Uploaded ${filename} successfully. ID: ${response.data.id}`);
+  return response.data.id;
+}
+
+// Delete file from Google Drive (by ID or filename)
+async function deleteFileFromDrive(fileId, filename) {
+  if (!drive || !driveFolderId) return;
+  try {
+    if (fileId) {
+      console.log(`🗑️  Deleting file ID ${fileId} from Google Drive...`);
+      await drive.files.delete({ fileId });
+    } else if (filename) {
+      console.log(`🔍 Searching for ${filename} to delete from Google Drive...`);
+      const searchResponse = await drive.files.list({
+        q: `name = '${filename}' and '${driveFolderId}' in parents and trashed = false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      });
+      const files = searchResponse.data.files;
+      if (files && files.length > 0) {
+        for (const f of files) {
+          console.log(`🗑️  Deleting file ID ${f.id} (${filename}) from Google Drive...`);
+          await drive.files.delete({ fileId: f.id });
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`❌ Error deleting file ${filename} from Google Drive:`, error);
+  }
+}
+
+// Sync local database playlist.json to Google Drive
+async function syncDatabaseToDrive() {
+  if (!drive || !driveFolderId) return;
+  try {
+    console.log('📤 Syncing playlist.json database to Google Drive...');
+    const response = await drive.files.list({
+      q: `name = 'playlist.json' and '${driveFolderId}' in parents and trashed = false`,
+      fields: 'files(id, name)',
+      spaces: 'drive'
+    });
+    const files = response.data.files;
+    const media = {
+      mimeType: 'application/json',
+      body: fs.createReadStream(dbPath)
+    };
+
+    if (files && files.length > 0) {
+      const fileId = files[0].id;
+      await drive.files.update({
+        fileId: fileId,
+        media: media
+      });
+      console.log('📤 Updated playlist.json on Google Drive.');
+    } else {
+      const fileMetadata = {
+        name: 'playlist.json',
+        parents: [driveFolderId]
+      };
+      await drive.files.create({
+        resource: fileMetadata,
+        media: media,
+        fields: 'id'
+      });
+      console.log('📤 Created playlist.json on Google Drive.');
+    }
+  } catch (error) {
+    console.error('❌ Error syncing database to Google Drive:', error);
+  }
+}
+
+// Unified proxy streaming route for local files & Google Drive API
+app.get('/uploads/:filename', async (req, res) => {
+  const { filename } = req.params;
+
+  // 1. If physical local file exists (or G: drive mount is active), serve it directly
+  const localPath = path.join(uploadsDir, filename);
+  if (fs.existsSync(localPath)) {
+    return res.sendFile(localPath);
+  }
+
+  // 2. Otherwise, if Google Drive API is active, stream it from Google Drive
+  if (drive && driveFolderId) {
+    try {
+      let fileId = null;
+
+      // Look up in database to see if we already have the Google Drive file ID cached
+      const playlist = readDatabase();
+      
+      if (filename.startsWith('song-')) {
+        const song = playlist.find(s => s.filename === filename);
+        if (song && song.gdriveFileId) {
+          fileId = song.gdriveFileId;
+        }
+      } else if (filename.startsWith('art-')) {
+        const song = playlist.find(s => s.artworkUrl === `/uploads/${filename}`);
+        if (song && song.gdriveArtworkFileId) {
+          fileId = song.gdriveArtworkFileId;
+        }
+      }
+
+      // If not cached in the database, search for it on Google Drive by name
+      if (!fileId) {
+        console.log(`🔍 File ID not cached for ${filename}. Searching Google Drive...`);
+        const searchResponse = await drive.files.list({
+          q: `name = '${filename}' and '${driveFolderId}' in parents and trashed = false`,
+          fields: 'files(id, name, size, mimeType)',
+          spaces: 'drive'
+        });
+        const files = searchResponse.data.files;
+        if (files && files.length > 0) {
+          fileId = files[0].id;
+        }
+      }
+
+      if (fileId) {
+        console.log(`🔀 Streaming ${filename} from Google Drive (File ID: ${fileId})...`);
+
+        // Fetch file metadata to get content-length and content-type
+        const meta = await drive.files.get({
+          fileId: fileId,
+          fields: 'size, mimeType'
+        });
+
+        const totalSize = parseInt(meta.data.size, 10);
+        const mimeType = meta.data.mimeType || 'application/octet-stream';
+
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Accept-Ranges', 'bytes');
+
+        const range = req.headers.range;
+        if (range) {
+          // Parse Range header e.g. "bytes=1000-2000"
+          const parts = range.replace(/bytes=/, "").split("-");
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+          const chunkSize = (end - start) + 1;
+
+          console.log(`🔄 Range request: bytes ${start}-${end}/${totalSize} for ${filename}`);
+
+          res.status(206);
+          res.setHeader('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+          res.setHeader('Content-Length', chunkSize);
+
+          const driveResponse = await drive.files.get(
+            { fileId: fileId, alt: 'media' },
+            { 
+              responseType: 'stream',
+              headers: { Range: `bytes=${start}-${end}` }
+            }
+          );
+
+          driveResponse.data
+            .on('error', err => {
+              console.error(`Error during Google Drive streaming of ${filename}:`, err);
+              if (!res.headersSent) {
+                res.status(500).send('Streaming error');
+              }
+            })
+            .pipe(res);
+        } else {
+          // Full file request
+          res.setHeader('Content-Length', totalSize);
+          const driveResponse = await drive.files.get(
+            { fileId: fileId, alt: 'media' },
+            { responseType: 'stream' }
+          );
+
+          driveResponse.data
+            .on('error', err => {
+              console.error(`Error during Google Drive streaming of ${filename}:`, err);
+              if (!res.headersSent) {
+                res.status(500).send('Streaming error');
+              }
+            })
+            .pipe(res);
+        }
+        return;
+      } else {
+        console.warn(`⚠️ File ${filename} not found on Google Drive.`);
+      }
+    } catch (err) {
+      console.error(`❌ Error proxying ${filename} from Google Drive:`, err);
+    }
+  }
+
+  // 3. Fallback: file not found
+  res.status(404).send('File not found');
+});
 
 // Serve client build in production
 app.use(express.static(path.join(__dirname, 'client/dist')));
+
 
 // Helper: Get local network IP
 function getLocalIP() {
@@ -81,6 +400,9 @@ function readDatabase() {
 function writeDatabase(data) {
   try {
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf8');
+    if (drive) {
+      syncDatabaseToDrive().catch(err => console.error('Error syncing DB in writeDatabase:', err));
+    }
   } catch (error) {
     console.error('Error writing database:', error);
   }
@@ -183,6 +505,36 @@ app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => 
         console.error('Failed to parse metadata / cover art:', err);
       }
 
+      // Google Drive API upload if active and not G: drive local sync
+      let gdriveFileId = null;
+      let gdriveArtworkFileId = null;
+
+      if (drive && !isLocalGDriveActive) {
+        try {
+          // Upload audio file
+          gdriveFileId = await uploadFileToDrive(file.path, file.filename, file.mimetype);
+          
+          // Delete temporary local audio file
+          fs.unlink(file.path, (err) => {
+            if (err && err.code !== 'ENOENT') console.error(`Error unlinking temp audio ${file.path}:`, err);
+          });
+
+          // Upload artwork file if present
+          if (artworkUrl) {
+            const artFilename = path.basename(artworkUrl);
+            const artPath = path.join(uploadsDir, artFilename);
+            gdriveArtworkFileId = await uploadFileToDrive(artPath, artFilename, 'image/jpeg');
+            
+            // Delete temporary local artwork file
+            fs.unlink(artPath, (err) => {
+              if (err && err.code !== 'ENOENT') console.error(`Error unlinking temp artwork ${artPath}:`, err);
+            });
+          }
+        } catch (uploadErr) {
+          console.error(`❌ Google Drive API upload failed for ${file.originalname}:`, uploadErr);
+        }
+      }
+
       currentMaxOrder++;
       const newSong = {
         id: 'song_' + Date.now() + '_' + Math.round(Math.random() * 1000000),
@@ -193,7 +545,9 @@ app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => 
         artworkUrl: artworkUrl,
         duration: duration,
         order: currentMaxOrder,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        ...(gdriveFileId && { gdriveFileId }),
+        ...(gdriveArtworkFileId && { gdriveArtworkFileId })
       };
 
       playlist.push(newSong);
@@ -245,7 +599,6 @@ app.delete('/api/playlist/:id', (req, res) => {
   }
 
   const song = playlist[songIndex];
-  const filePath = path.join(uploadsDir, song.filename);
 
   // Remove from database
   playlist.splice(songIndex, 1);
@@ -258,22 +611,36 @@ app.delete('/api/playlist/:id', (req, res) => {
 
   writeDatabase(playlist);
 
-  // Remove physical song file asynchronously
-  fs.unlink(filePath, (err) => {
-    if (err) {
-      console.error(`Error deleting file ${filePath}:`, err);
+  // Delete from Google Drive if API is active
+  if (drive && !isLocalGDriveActive) {
+    deleteFileFromDrive(song.gdriveFileId, song.filename).catch(err => 
+      console.error(`Error deleting song file from Drive:`, err)
+    );
+    
+    if (song.artworkUrl) {
+      const artworkFilename = path.basename(song.artworkUrl);
+      deleteFileFromDrive(song.gdriveArtworkFileId, artworkFilename).catch(err =>
+        console.error(`Error deleting artwork file from Drive:`, err)
+      );
     }
-  });
-
-  // Remove artwork file if it exists
-  if (song.artworkUrl) {
-    const artworkFilename = path.basename(song.artworkUrl);
-    const artworkPath = path.join(uploadsDir, artworkFilename);
-    fs.unlink(artworkPath, (err) => {
-      if (err) {
-        console.error(`Error deleting artwork file ${artworkPath}:`, err);
+  } else {
+    // Local filesystem delete
+    const filePath = path.join(uploadsDir, song.filename);
+    fs.unlink(filePath, (err) => {
+      if (err && err.code !== 'ENOENT') {
+        console.error(`Error deleting file ${filePath}:`, err);
       }
     });
+
+    if (song.artworkUrl) {
+      const artworkFilename = path.basename(song.artworkUrl);
+      const artworkPath = path.join(uploadsDir, artworkFilename);
+      fs.unlink(artworkPath, (err) => {
+        if (err && err.code !== 'ENOENT') {
+          console.error(`Error deleting artwork file ${artworkPath}:`, err);
+        }
+      });
+    }
   }
 
   res.json({ success: true, message: 'Song deleted successfully' });
@@ -297,11 +664,36 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'client/dist/index.html'));
 });
 
-// Start Server
-app.listen(PORT, () => {
-  console.log(`====================================================`);
-  console.log(` Trucker DJ Player Server is running!`);
-  console.log(` PC Local: http://localhost:${PORT}`);
-  console.log(` Mobile Local Network: http://${getLocalIP()}:${PORT}`);
-  console.log(`====================================================`);
-});
+// Start Server after initializing Google Drive
+(async () => {
+  console.log('🔄 Initializing system...');
+
+  // Local G: drive startup synchronization
+  if (isLocalGDriveActive) {
+    const gDriveDbPath = path.join(uploadsDir, 'playlist.json');
+    if (fs.existsSync(gDriveDbPath)) {
+      try {
+        fs.copyFileSync(gDriveDbPath, dbPath);
+        console.log('📥 Successfully synchronized database from local G: drive on startup.');
+      } catch (err) {
+        console.error('Error loading database from local G: drive:', err);
+      }
+    }
+  }
+
+  const driveInitialized = await initGoogleDrive();
+  if (driveInitialized) {
+    console.log('💚 Google Drive API integration initialized successfully.');
+  } else {
+    console.log('💛 Running server in standard local filesystem mode.');
+  }
+
+  app.listen(PORT, () => {
+    console.log(`====================================================`);
+    console.log(` Trucker DJ Player Server is running!`);
+    console.log(` PC Local: http://localhost:${PORT}`);
+    console.log(` Mobile Local Network: http://${getLocalIP()}:${PORT}`);
+    console.log(`====================================================`);
+  });
+})();
+

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { triggerTactileFeedback } from '../utils/tactile';
 
 export default function Dashboard({ 
   currentSong, 
@@ -17,9 +18,20 @@ export default function Dashboard({
   isNightDrive = false,
   onNightDriveChange = () => {},
   isShuffle = false,
-  onShuffleChange = () => {}
+  onShuffleChange = () => {},
+  isFlickerActive = true,
+  onFlickerChange = () => {}
 }) {
   const [rotation, setRotation] = useState(0);
+  const lastVolTickRef = useRef(volume);
+
+  useEffect(() => {
+    const diff = Math.abs(volume - lastVolTickRef.current);
+    if (diff >= 0.04) {
+      triggerTactileFeedback('dial_tick');
+      lastVolTickRef.current = volume;
+    }
+  }, [volume]);
 
   // Animate volume knob rotation based on level
   // Volume range 0 to 1. Rotate from -135deg to +135deg (270 degrees total)
@@ -30,6 +42,174 @@ export default function Dashboard({
     const mins = Math.floor(time / 60);
     const secs = Math.floor(time % 60);
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  // Swipe to next song states and event handlers
+  const [offsetX, setOffsetX] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const [opacity, setOpacity] = useState(1);
+  const startXRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const bannerRef = useRef(null);
+
+  const handleTouchStart = (e) => {
+    if (e.target.closest('button')) return;
+    startXRef.current = e.touches[0].clientX;
+    setIsSwiping(true);
+    isDraggingRef.current = true;
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDraggingRef.current) return;
+    const clientX = e.touches[0].clientX;
+    const deltaX = clientX - startXRef.current;
+    
+    // Allow both left and right swiping!
+    if (e.cancelable) e.preventDefault();
+    setOffsetX(deltaX);
+    const width = bannerRef.current ? bannerRef.current.offsetWidth : 300;
+    setOpacity(Math.max(0.1, 1 - (Math.abs(deltaX) / width)));
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    
+    const threshold = 80; // trigger skip threshold
+    const width = bannerRef.current ? bannerRef.current.offsetWidth : 300;
+    
+    // Check if it is a simple tap (very small movement)
+    if (Math.abs(offsetX) < 8) {
+      triggerTactileFeedback('button_press');
+      onPlayPause();
+      setIsSwiping(false);
+      setOffsetX(0);
+      setOpacity(1);
+      return;
+    }
+    
+    if (offsetX > threshold) {
+      // Swipe Right -> Next Song
+      triggerTactileFeedback('button_press');
+      setIsSwiping(false);
+      setOffsetX(width);
+      setOpacity(0);
+      
+      // Complete slide-out right transition
+      setTimeout(() => {
+        onNext();
+        // Immediately snap to left off-screen for the new track
+        setOffsetX(-width);
+        setOpacity(0);
+        
+        // Slide in from left
+        setTimeout(() => {
+          setOffsetX(0);
+          setOpacity(1);
+        }, 50);
+      }, 350);
+    } else if (offsetX < -threshold) {
+      // Swipe Left -> Prev Song
+      triggerTactileFeedback('button_press');
+      setIsSwiping(false);
+      setOffsetX(-width);
+      setOpacity(0);
+      
+      // Complete slide-out left transition
+      setTimeout(() => {
+        onPrev();
+        // Immediately snap to right off-screen for the new track
+        setOffsetX(width);
+        setOpacity(0);
+        
+        // Slide in from right
+        setTimeout(() => {
+          setOffsetX(0);
+          setOpacity(1);
+        }, 50);
+      }, 350);
+    } else {
+      // Spring back to original center
+      setIsSwiping(false);
+      setOffsetX(0);
+      setOpacity(1);
+    }
+  };
+
+  const handleMouseDown = (e) => {
+    if (e.target.closest('button')) return;
+    startXRef.current = e.clientX;
+    setIsSwiping(true);
+    isDraggingRef.current = true;
+    
+    const handleMouseMove = (event) => {
+      if (!isDraggingRef.current) return;
+      const deltaX = event.clientX - startXRef.current;
+      setOffsetX(deltaX);
+      const w = bannerRef.current ? bannerRef.current.offsetWidth : 300;
+      setOpacity(Math.max(0.1, 1 - (Math.abs(deltaX) / w)));
+    };
+    
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      
+      const threshold = 80;
+      const w = bannerRef.current ? bannerRef.current.offsetWidth : 300;
+      
+      if (Math.abs(offsetX) < 8) {
+        triggerTactileFeedback('button_press');
+        onPlayPause();
+        setIsSwiping(false);
+        setOffsetX(0);
+        setOpacity(1);
+        return;
+      }
+      
+      if (offsetX > threshold) {
+        // Swipe Right -> Next Song
+        triggerTactileFeedback('button_press');
+        setIsSwiping(false);
+        setOffsetX(w);
+        setOpacity(0);
+        
+        setTimeout(() => {
+          onNext();
+          setOffsetX(-w);
+          setOpacity(0);
+          
+          setTimeout(() => {
+            setOffsetX(0);
+            setOpacity(1);
+          }, 50);
+        }, 350);
+      } else if (offsetX < -threshold) {
+        // Swipe Left -> Prev Song
+        triggerTactileFeedback('button_press');
+        setIsSwiping(false);
+        setOffsetX(-w);
+        setOpacity(0);
+        
+        setTimeout(() => {
+          onPrev();
+          setOffsetX(w);
+          setOpacity(0);
+          
+          setTimeout(() => {
+            setOffsetX(0);
+            setOpacity(1);
+          }, 50);
+        }, 350);
+      } else {
+        setIsSwiping(false);
+        setOffsetX(0);
+        setOpacity(1);
+      }
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
   };
 
   // Drag-to-roll horizontal metal thumbwheel volume control
@@ -76,51 +256,134 @@ export default function Dashboard({
   };
 
   return (
-    <div className="chrome-bezel" style={{ padding: '18px 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <div className="brass-rivet" style={{ top: '6px', left: '6px' }} />
-      <div className="brass-rivet" style={{ top: '6px', right: '6px' }} />
-      <div className="brass-rivet" style={{ bottom: '6px', left: '6px' }} />
-      <div className="brass-rivet" style={{ bottom: '6px', right: '6px' }} />
-      <div className="wood-grain-overlay" />
+    <div className="dashboard-integrated" style={{ display: 'flex', flexDirection: 'column', gap: '16px', zIndex: 2, position: 'relative' }}>
       
       {/* LCD Track Screen with dynamic album artwork background fill */}
       <div 
+        ref={bannerRef}
         className="digital-display" 
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
         style={{ 
-          backgroundImage: currentSong && currentSong.artworkUrl 
-            ? `linear-gradient(rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.85) 100%), url(${currentSong.artworkUrl})` 
-            : 'none',
           backgroundColor: '#0e1114',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          transition: 'all 0.4s ease-in-out',
-          border: currentSong && currentSong.artworkUrl ? '4px solid var(--color-amber)' : '4px solid #1a1613'
+          border: '4px solid #1a1613',
+          padding: '0',
+          overflow: 'hidden',
+          position: 'relative',
+          cursor: isSwiping ? 'grabbing' : 'grab',
+          userSelect: 'none',
+          height: '115px'
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', zIndex: 2, position: 'relative' }}>
-          <span className="display-green" style={{ fontSize: '10px', letterSpacing: '1px' }}>FM RADIO STAGE</span>
-          <span className="display-amber" style={{ fontSize: '10px' }}>
-            CROSSFADE: {crossfadeDuration}s
-          </span>
+        {/* Layer 1: Sliding Dynamic Album Artwork Background */}
+        <div 
+          className="digital-display-artwork-bg"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            backgroundImage: currentSong && currentSong.artworkUrl 
+              ? `linear-gradient(rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.85) 100%), url(${currentSong.artworkUrl})` 
+              : 'none',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            transform: `translateX(${offsetX}px)`,
+            opacity: opacity,
+            transition: isSwiping ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.35s ease-out',
+            zIndex: 1
+          }}
+        />
+
+        {/* Layer 2: Stationary Large Play/Pause Centered Indicator */}
+        <div 
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            fontSize: isPlaying ? '30px' : '36px',
+            color: '#14ff73',
+            opacity: 0.08,
+            pointerEvents: 'none',
+            zIndex: 2,
+            fontFamily: 'monospace',
+            transition: 'all 0.3s ease-in-out',
+            textShadow: '0 0 10px rgba(20, 255, 115, 0.8)'
+          }}
+        >
+          {isPlaying ? '▮▮' : '▶'}
         </div>
-        
-        {/* Track Title Scrolling Container */}
-        <div style={{ height: '24px', overflow: 'hidden', position: 'relative', marginBottom: '10px', zIndex: 2 }}>
+
+        {/* Layer 3: Sliding Track Title in the Center */}
+        <div 
+          style={{ 
+            position: 'absolute', 
+            top: '46px', 
+            left: '14px', 
+            right: '14px', 
+            height: '24px', 
+            overflow: 'hidden', 
+            zIndex: 3,
+            transform: `translateX(${offsetX}px)`,
+            opacity: opacity,
+            transition: isSwiping ? 'none' : 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.35s ease-out',
+            display: 'flex',
+            justifyContent: 'center',
+            pointerEvents: 'none'
+          }}
+        >
           <div 
             className="display-amber" 
             style={{ 
               fontSize: '16px', 
               fontWeight: 'bold',
               whiteSpace: 'nowrap',
-              fontFamily: 'var(--font-digital)'
+              fontFamily: 'var(--font-digital)',
+              textAlign: 'center'
             }}
           >
             {currentSong ? currentSong.title : 'NO TRACK LOADED - WAITING...'}
           </div>
         </div>
 
-        {/* Dynamic Timing LCD */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 2, position: 'relative' }}>
+        {/* Layer 4: Stationary Top Header Row & Bottom Durations */}
+        {/* Top Header Row */}
+        <div 
+          style={{ 
+            position: 'absolute', 
+            top: '14px', 
+            left: '14px', 
+            right: '14px', 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            zIndex: 4,
+            pointerEvents: 'none'
+          }}
+        >
+          <span className="display-green" style={{ fontSize: '10px', letterSpacing: '1px' }}>FM RADIO STAGE</span>
+          <span className="display-amber" style={{ fontSize: '10px' }}>
+            CROSSFADE: {crossfadeDuration}s
+          </span>
+        </div>
+        
+        {/* Bottom Clocks Row */}
+        <div 
+          style={{ 
+            position: 'absolute', 
+            bottom: '14px', 
+            left: '14px', 
+            right: '14px', 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            zIndex: 4,
+            pointerEvents: 'none'
+          }}
+        >
           <div className="display-green" style={{ fontSize: '18px', letterSpacing: '2px' }}>
             {formatTime(currentTime)}
           </div>
@@ -131,17 +394,15 @@ export default function Dashboard({
       </div>
 
       {/* Middle Section: Progress, Volume, and Auto DJ Toggle */}
-      <div style={{ display: 'flex', gap: '16px', alignItems: 'center', zIndex: 2, position: 'relative' }}>
+      <div className="dashboard-middle-section" style={{ display: 'flex', gap: '16px', alignItems: 'center', zIndex: 2, position: 'relative' }}>
         
         {/* Left Column: Progress and Volume */}
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '14px' }}>
+        <div className="dashboard-sliders-col" style={{ display: 'flex', flexDirection: 'column', flex: 1, gap: '14px' }}>
           
           {/* Song Progress Timeline Scroller */}
           <div 
             className="dashboard-bezel" 
             style={{ 
-              background: 'rgba(0,0,0,0.4)', 
-              border: '1.5px solid #2d343c', 
               padding: '10px 14px', 
               display: 'flex', 
               flexDirection: 'column', 
@@ -154,7 +415,10 @@ export default function Dashboard({
                 min="0"
                 max={totalDuration || 0}
                 value={currentTime || 0}
-                onChange={(e) => onSeek(Number(e.target.value))}
+                onChange={(e) => {
+                  onSeek(Number(e.target.value));
+                  triggerTactileFeedback('dial_tick');
+                }}
                 className="dashboard-slider"
                 style={{ width: '100%', cursor: 'pointer', position: 'relative', zIndex: '2' }}
                 title="Прокрутка пісні"
@@ -202,7 +466,10 @@ export default function Dashboard({
             <div className={`vintage-toggle-light ${crossfadeDuration > 0 ? 'active' : ''}`} />
             <div className="vintage-toggle-label" style={{ marginTop: '2px' }}>ON</div>
             
-            <div className="vintage-toggle-base" onClick={() => onCrossfadeChange(crossfadeDuration > 0 ? 0 : 5)}>
+            <div className="vintage-toggle-base" onClick={() => {
+              triggerTactileFeedback(crossfadeDuration > 0 ? 'switch_off' : 'switch_on');
+              onCrossfadeChange(crossfadeDuration > 0 ? 0 : 5);
+            }}>
               <div className="vintage-toggle-hex">
                 <div className="vintage-toggle-ring-1">
                   <div className="vintage-toggle-ring-2">
@@ -221,7 +488,10 @@ export default function Dashboard({
             <div className={`vintage-toggle-light ${isNightDrive ? 'active' : ''}`} />
             <div className="vintage-toggle-label" style={{ marginTop: '2px' }}>ON</div>
             
-            <div className="vintage-toggle-base" onClick={() => onNightDriveChange(!isNightDrive)}>
+            <div className="vintage-toggle-base" onClick={() => {
+              triggerTactileFeedback(isNightDrive ? 'switch_off' : 'switch_on');
+              onNightDriveChange(!isNightDrive);
+            }}>
               <div className="vintage-toggle-hex">
                 <div className="vintage-toggle-ring-1">
                   <div className="vintage-toggle-ring-2">
@@ -240,11 +510,36 @@ export default function Dashboard({
             <div className={`vintage-toggle-light ${isShuffle ? 'active' : ''}`} />
             <div className="vintage-toggle-label" style={{ marginTop: '2px' }}>ON</div>
             
-            <div className="vintage-toggle-base" onClick={() => onShuffleChange(!isShuffle)}>
+            <div className="vintage-toggle-base" onClick={() => {
+              triggerTactileFeedback(isShuffle ? 'switch_off' : 'switch_on');
+              onShuffleChange(!isShuffle);
+            }}>
               <div className="vintage-toggle-hex">
                 <div className="vintage-toggle-ring-1">
                   <div className="vintage-toggle-ring-2">
                     <div className={`vintage-toggle-stalk ${isShuffle ? 'on' : 'off'}`} />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="vintage-toggle-label" style={{ marginTop: '0px' }}>OFF</div>
+          </div>
+
+          {/* 4. NEON FLICKER Switch */}
+          <div className="vintage-toggle-wood">
+            <div className="vintage-toggle-title">NEON<br/>FLICKER</div>
+            <div className={`vintage-toggle-light ${isFlickerActive ? 'active' : ''}`} />
+            <div className="vintage-toggle-label" style={{ marginTop: '2px' }}>ON</div>
+            
+            <div className="vintage-toggle-base" onClick={() => {
+              triggerTactileFeedback(isFlickerActive ? 'switch_off' : 'switch_on');
+              onFlickerChange(!isFlickerActive);
+            }}>
+              <div className="vintage-toggle-hex">
+                <div className="vintage-toggle-ring-1">
+                  <div className="vintage-toggle-ring-2">
+                    <div className={`vintage-toggle-stalk ${isFlickerActive ? 'on' : 'off'}`} />
                   </div>
                 </div>
               </div>
@@ -257,11 +552,14 @@ export default function Dashboard({
       </div>
 
       {/* Centered Playback Controls */}
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '32px', margin: '8px 0', zIndex: 2 }}>
+      <div className="dashboard-playback-strip" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '32px', margin: '8px 0', zIndex: 2 }}>
         {/* Mechanical Prev Button */}
         <button 
           className="industrial-btn-square" 
-          onClick={onPrev}
+          onClick={() => {
+            triggerTactileFeedback('button_press');
+            onPrev();
+          }}
           title="Попередня пісня"
         >
           ⏮
@@ -270,7 +568,10 @@ export default function Dashboard({
         {/* Heavy Play/Pause Center Trigger */}
         <button 
           className={`play-btn-square ${isPlaying ? 'active' : ''}`}
-          onClick={onPlayPause}
+          onClick={() => {
+            triggerTactileFeedback('button_press');
+            onPlayPause();
+          }}
           title={isPlaying ? 'Пауза' : 'Грати'}
         >
           {isPlaying ? '⏸' : '▶'}
@@ -279,7 +580,10 @@ export default function Dashboard({
         {/* Mechanical Next Button */}
         <button 
           className="industrial-btn-square" 
-          onClick={onNext}
+          onClick={() => {
+            triggerTactileFeedback('button_press');
+            onNext();
+          }}
           title="Наступна пісня"
         >
           ⏭

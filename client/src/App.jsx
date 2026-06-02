@@ -3,6 +3,8 @@ import Dashboard from './components/Dashboard';
 import SongList from './components/SongList';
 import ShareModal from './components/ShareModal';
 import Visualizer from './components/Visualizer';
+import ExhaustSmoke from './components/ExhaustSmoke';
+import { triggerTactileFeedback } from './utils/tactile';
 
 export default function App() {
   const [songs, setSongs] = useState([]);
@@ -18,6 +20,8 @@ export default function App() {
   const [analyser, setAnalyser] = useState(null);
   const [isNightDrive, setIsNightDrive] = useState(false);
   const [isShuffle, setIsShuffle] = useState(false);
+  const [isFlickerActive, setIsFlickerActive] = useState(true);
+  const [playedSongIds, setPlayedSongIds] = useState([]);
 
   // Dual Audio Elements
   const audioARef = useRef(new Audio());
@@ -28,6 +32,31 @@ export default function App() {
   const analyserRef = useRef(null);
   const sourceARef = useRef(null);
   const sourceBRef = useRef(null);
+
+  // Smooth Tape Wind-down / Spin-up playbackRate animation
+  const rampAudioPlaybackRate = (audio, target, duration, onComplete) => {
+    const start = audio.playbackRate || 1.0;
+    const startTime = performance.now();
+    
+    const animate = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / duration);
+      
+      // Smooth cubic ease-in-out for realistic tape motor physics
+      const easeProgress = progress < 0.5 
+        ? 2 * progress * progress 
+        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+      
+      audio.playbackRate = start + (target - start) * easeProgress;
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        if (onComplete) onComplete();
+      }
+    };
+    requestAnimationFrame(animate);
+  };
 
   // Initialize Web Audio API on user gesture to get real frequency data
   const initAudioContext = () => {
@@ -127,6 +156,51 @@ export default function App() {
     return () => clearInterval(pollInterval);
   }, []);
 
+  // Gyroscope Accelerometer (Mobile) & cursor tracking parallax mouse listener (Desktop fallback)
+  useEffect(() => {
+    let hasGyro = false;
+
+    const handleOrientation = (e) => {
+      if (e.beta === null || e.gamma === null) return;
+      hasGyro = true;
+      const beta = e.beta;
+      const gamma = e.gamma;
+      
+      // Normalize tilt values between -1 and 1
+      const x = Math.max(-1.0, Math.min(1.0, gamma / 30));
+      const y = Math.max(-1.0, Math.min(1.0, (beta - 45) / 30)); // assumes common viewing angle
+      
+      document.documentElement.style.setProperty('--gyro-x', x.toFixed(3));
+      document.documentElement.style.setProperty('--gyro-y', y.toFixed(3));
+    };
+
+    const handleMouseMove = (e) => {
+      if (hasGyro) return; // avoid conflicts if gyro is actively supplying values
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      
+      // Calculate cursor position from center of screen (-1.0 to 1.0)
+      const x = (e.clientX / w) * 2 - 1;
+      const y = (e.clientY / h) * 2 - 1;
+      
+      document.documentElement.style.setProperty('--gyro-x', x.toFixed(3));
+      document.documentElement.style.setProperty('--gyro-y', y.toFixed(3));
+    };
+
+    window.addEventListener('deviceorientation', handleOrientation);
+    window.addEventListener('mousemove', handleMouseMove);
+
+    return () => {
+      window.removeEventListener('deviceorientation', handleOrientation);
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
+
+  // Sync playedSongIds when playlist changes to filter out deleted songs
+  useEffect(() => {
+    setPlayedSongIds(prev => prev.filter(id => songs.some(s => s.id === id)));
+  }, [songs]);
+
   // Update hardware volume on active players
   useEffect(() => {
     if (!isTransitioningRef.current) {
@@ -224,11 +298,22 @@ export default function App() {
     const index = songs.findIndex(s => s.id === song.id);
     if (index === -1) return;
 
+    // Record selected song ID to played history
+    setPlayedSongIds(prev => {
+      if (!prev.includes(song.id)) {
+        return [...prev, song.id];
+      }
+      return prev;
+    });
+
     // Repeated click toggle: if clicked song is already active, play/pause it!
     if (index === currentSongIndex) {
       handlePlayPause();
       return;
     }
+
+    // Play solid mechanical button press instead of radio static!
+    triggerTactileFeedback('button_press');
 
     setCurrentSongIndex(index);
     isTransitioningRef.current = false;
@@ -273,6 +358,9 @@ export default function App() {
 
     const activeAudio = activePlayer === 'A' ? audioARef.current : audioBRef.current;
 
+    // Play click sound on play/pause press!
+    triggerTactileFeedback('button_press');
+
     if (isPlaying) {
       activeAudio.pause();
       setIsPlaying(false);
@@ -287,6 +375,8 @@ export default function App() {
       }
       
       activeAudio.volume = activePlayer === 'A' ? volume : 0;
+      activeAudio.playbackRate = 1.0; // Ensure normal playback speed
+      
       if (isTransitioningRef.current) {
         // If we are crossfading, play both!
         audioARef.current.play().catch(() => {});
@@ -298,14 +388,44 @@ export default function App() {
     }
   };
 
+  // Get next random song index using a non-repeating shuffle pool
+  const getNextShuffleIndex = (currentIndex) => {
+    if (songs.length === 0) return -1;
+    if (songs.length === 1) return 0;
+
+    // Filter songs that haven't been played in this cycle yet
+    // Exclude the current song to avoid playing it twice consecutively
+    let unplayed = songs.filter(s => !playedSongIds.includes(s.id) && s.id !== (songs[currentIndex]?.id));
+
+    // If all songs have been played, reset the pool!
+    if (unplayed.length === 0) {
+      // Reset pool, keeping only the currently playing song's ID to avoid repeating it immediately
+      const currentId = songs[currentIndex]?.id;
+      const newPlayed = currentId ? [currentId] : [];
+      setPlayedSongIds(newPlayed);
+      
+      // The new unplayed pool will be all other songs
+      unplayed = songs.filter(s => s.id !== currentId);
+    }
+
+    if (unplayed.length === 0) return 0;
+
+    // Pick a random song from the unplayed pool
+    const randomSong = unplayed[Math.floor(Math.random() * unplayed.length)];
+    const nextIndex = songs.findIndex(s => s.id === randomSong.id);
+
+    // Record this song as played
+    setPlayedSongIds(prev => [...prev, randomSong.id]);
+
+    return nextIndex !== -1 ? nextIndex : 0;
+  };
+
   // Play Next Song (Simple skip)
   const playNextSong = () => {
     if (songs.length === 0) return;
     let nextIndex;
-    if (isShuffle && songs.length > 1) {
-      do {
-        nextIndex = Math.floor(Math.random() * songs.length);
-      } while (nextIndex === currentSongIndex);
+    if (isShuffle) {
+      nextIndex = getNextShuffleIndex(currentSongIndex);
     } else {
       nextIndex = currentSongIndex + 1;
       if (nextIndex >= songs.length) {
@@ -319,10 +439,8 @@ export default function App() {
   const playPrevSong = () => {
     if (songs.length === 0) return;
     let prevIndex;
-    if (isShuffle && songs.length > 1) {
-      do {
-        prevIndex = Math.floor(Math.random() * songs.length);
-      } while (prevIndex === currentSongIndex);
+    if (isShuffle) {
+      prevIndex = getNextShuffleIndex(currentSongIndex);
     } else {
       prevIndex = currentSongIndex - 1;
       if (prevIndex < 0) {
@@ -335,10 +453,8 @@ export default function App() {
   // DJ Transition Engine (Crossfading A & B players)
   const triggerDJCrossfade = () => {
     let nextSongIndex;
-    if (isShuffle && songs.length > 1) {
-      do {
-        nextSongIndex = Math.floor(Math.random() * songs.length);
-      } while (nextSongIndex === currentSongIndex);
+    if (isShuffle) {
+      nextSongIndex = getNextShuffleIndex(currentSongIndex);
     } else {
       nextSongIndex = (currentSongIndex + 1) % songs.length;
     }
@@ -487,66 +603,72 @@ export default function App() {
   const currentSong = songs[currentSongIndex] || null;
 
   return (
-    <div className={`app-container ${isNightDrive ? 'night-drive-active' : ''}`}>
+    <div className={`app-container ${isNightDrive ? 'night-drive-active' : ''} ${isNightDrive && isFlickerActive ? 'neon-flicker-active' : ''}`}>
       
-      {/* Chrome Bezel Header */}
-      <div className="chrome-bezel header-bezel" style={{ padding: '14px 18px', position: 'relative', overflow: 'hidden' }}>
-        <div className="brass-rivet" style={{ top: '6px', left: '6px' }} />
-        <div className="brass-rivet" style={{ top: '6px', right: '6px' }} />
-        <div className="brass-rivet" style={{ bottom: '6px', left: '6px' }} />
-        <div className="brass-rivet" style={{ bottom: '6px', right: '6px' }} />
+      <div className="main-dashboard-console">
+        {/* Brass rivets in the four corners of the main wooden dashboard console */}
+        <div className="brass-rivet" style={{ top: '8px', left: '8px' }} />
+        <div className="brass-rivet" style={{ top: '8px', right: '8px' }} />
+        <div className="brass-rivet" style={{ bottom: '8px', left: '8px' }} />
+        <div className="brass-rivet" style={{ bottom: '8px', right: '8px' }} />
         <div className="wood-grain-overlay" />
-        
-        <h1 className="header-title">
-          <span>🚚</span> ROAD DJ STAGE-1
-        </h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', zIndex: 2 }}>
-          <span className="cb-toggle-label" style={{ fontSize: '9px', color: 'var(--text-muted)' }}>ONLINE</span>
-          <span className="header-status" />
+
+
+        {/* Brass Dashboard Brand Inlay (Mounted directly on wood above the speedometer) */}
+        <div className="dashboard-brand-inlay" style={{ zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px 6px 4px', position: 'relative' }}>
+          <ExhaustSmoke isPlaying={isPlaying} analyser={analyser} />
+          
+          <h1 className="hud-title" style={{ margin: 0, fontSize: '11px', fontWeight: '900', letterSpacing: '1.5px', color: '#ffd294', textShadow: '0 1.5px 2px rgba(0,0,0,0.95), 0 0.5px 0.5px rgba(0,0,0,0.6)', textTransform: 'uppercase', fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center', gap: '6px', zIndex: 3 }}>
+            <span>🚚</span> ROAD DJ STAGE-1
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', zIndex: 3 }}>
+            <span className="cb-toggle-label" style={{ fontSize: '9px', color: '#ffd294', textShadow: '0 1px 2px rgba(0,0,0,0.95)', fontFamily: 'var(--font-serif)' }}>ONLINE</span>
+            <span className="header-status" />
+          </div>
         </div>
+
+        {/* Retro Analog VU Needle Meter */}
+        <Visualizer 
+          isPlaying={isPlaying} 
+          analyser={analyser} 
+          onShareClick={() => setIsShareOpen(true)} 
+          onUploadSuccess={handleUploadSuccess}
+          showToast={showToast}
+          songs={songs} 
+        />
+
+        {/* Main Dashboard Control Unit */}
+        <Dashboard
+          currentSong={currentSong}
+          isPlaying={isPlaying}
+          onPlayPause={handlePlayPause}
+          onNext={playNextSong}
+          onPrev={playPrevSong}
+          volume={volume}
+          onVolumeChange={setVolume}
+          crossfadeDuration={crossfadeDuration}
+          onCrossfadeChange={setCrossfadeDuration}
+          onShareClick={() => setIsShareOpen(true)}
+          currentTime={currentTime}
+          totalDuration={totalDuration}
+          onSeek={handleSeek}
+          isNightDrive={isNightDrive}
+          onNightDriveChange={setIsNightDrive}
+          isShuffle={isShuffle}
+          onShuffleChange={setIsShuffle}
+          isFlickerActive={isFlickerActive}
+          onFlickerChange={setIsFlickerActive}
+        />
+
+        {/* Sorted Song Queue */}
+        <SongList
+          songs={songs}
+          currentSongId={currentSong ? currentSong.id : null}
+          onSelectSong={handleSelectSong}
+          onDeleteSong={handleDeleteSong}
+          onReorderSongs={handleReorderSongs}
+        />
       </div>
-
-      {/* Retro Analog VU Needle Meter */}
-      <Visualizer 
-        isPlaying={isPlaying} 
-        analyser={analyser} 
-        onShareClick={() => setIsShareOpen(true)} 
-        onUploadSuccess={handleUploadSuccess}
-        showToast={showToast}
-        songs={songs} 
-      />
-
-      {/* Main Dashboard Control Unit */}
-      <Dashboard
-        currentSong={currentSong}
-        isPlaying={isPlaying}
-        onPlayPause={handlePlayPause}
-        onNext={playNextSong}
-        onPrev={playPrevSong}
-        volume={volume}
-        onVolumeChange={setVolume}
-        crossfadeDuration={crossfadeDuration}
-        onCrossfadeChange={setCrossfadeDuration}
-        onShareClick={() => setIsShareOpen(true)}
-        currentTime={currentTime}
-        totalDuration={totalDuration}
-        onSeek={handleSeek}
-        isNightDrive={isNightDrive}
-        onNightDriveChange={setIsNightDrive}
-        isShuffle={isShuffle}
-        onShuffleChange={setIsShuffle}
-      />
-
-      {/* Upload button is now integrated in the visualizer top-left corner */}
-
-      {/* Sorted Song Queue */}
-      <SongList
-        songs={songs}
-        currentSongId={currentSong ? currentSong.id : null}
-        onSelectSong={handleSelectSong}
-        onDeleteSong={handleDeleteSong}
-        onReorderSongs={handleReorderSongs}
-      />
 
       {/* Sync Sharing modal popup */}
       {isShareOpen && (

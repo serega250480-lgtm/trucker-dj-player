@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Orbitron:wght@700;900&family=Share+Tech+Mono&family=Inter:wght@300;400;600;700;800&display=swap');
 
 :root {
+  --gyro-x: 0;
+  --gyro-y: 0;
   --bg-dark: url('/black_leather_seamless.png'); /* Dark leather texture base */
   --wood-mahogany: url('/mahogany_wood_texture.png');
   --wood-mahogany-highlight: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.4) 100%);
@@ -73,9 +75,81 @@ body {
 .wood-grain-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--wood-mahogany-highlight);
+  background: radial-gradient(
+    circle at calc(50% + var(--gyro-x) * 180px) calc(30% + var(--gyro-y) * 140px),
+    rgba(255, 230, 180, 0.16) 0%,
+    transparent 55%
+  ), var(--wood-mahogany-highlight);
   pointer-events: none;
   z-index: 1;
+  mix-blend-mode: overlay;
+}
+
+/* Single continuous distressed vintage wood console */
+.main-dashboard-console {
+  background-image: 
+    /* Slightly worn / sun-bleached center lacquer wear spot */
+    radial-gradient(circle at 50% 30%, rgba(255, 230, 190, 0.08) 0%, transparent 60%),
+    /* Faded vignette with age grime at corners */
+    radial-gradient(circle at 50% 50%, transparent 45%, rgba(10, 5, 2, 0.45) 90%),
+    /* Light hairline cracks, fine scratches, and lacquer crazing */
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.035) 0px, rgba(0, 0, 0, 0.035) 1px, transparent 1px, transparent 12px),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.02) 0px, rgba(255, 255, 255, 0.02) 1px, transparent 1px, transparent 15px),
+    var(--wood-mahogany);
+  background-size: cover;
+  background-position: center;
+  border-radius: 12px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  
+  /* Heavy-duty outer chrome bezel frame holding the whole console slab */
+  border: 6.5px solid;
+  border-image: var(--panel-chrome) 1;
+  box-shadow: 
+    0 24px 50px rgba(0, 0, 0, 0.9), 
+    0 8px 16px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -4px 10px rgba(0, 0, 0, 0.95),
+    0 3px 5px rgba(0,0,0,0.6);
+  position: relative;
+  max-width: 900px;
+  width: 100%;
+  margin: 16px auto;
+  overflow: hidden;
+}
+
+/* Glossy diagonal parallax light reflection overlay for the entire dashboard console */
+.main-dashboard-console::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.04) 47%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.04) 53%,
+    transparent 65%
+  );
+  background-size: 250% 100%;
+  background-position: calc(50% + var(--gyro-x) * 80%) 0;
+  pointer-events: none;
+  z-index: 12; /* Above all background wood, below buttons/controls */
+  mix-blend-mode: overlay;
+  transition: background-position 0.1s ease-out;
+}
+
+/* Recessed panel cutout inside the main wood console */
+.recessed-cutout {
+  border: 1.5px solid #2d343c;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  box-shadow: 
+    inset 0 4px 10px rgba(0, 0, 0, 0.92),
+    inset 0 1px 3px rgba(0, 0, 0, 0.8),
+    0 1px 1px rgba(255, 255, 255, 0.08);
 }
 
 /* Screws & Rivets */
@@ -117,10 +191,16 @@ body {
   position: absolute;
   top: -50%; left: -50%; right: -50%; bottom: -50%;
   background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 40%, transparent 41%);
-  transform: rotate(12deg);
+  transform: rotate(12deg) translate(calc(var(--gyro-x) * 20px), calc(var(--gyro-y) * 15px));
   pointer-events: none;
   border-radius: 3px;
   z-index: 3;
+  transition: transform 0.1s ease-out;
+}
+
+.digital-display.carbon-panel {
+  height: 280px;
+  transition: height 0.3s ease;
 }
 
 .display-amber {
@@ -564,7 +644,7 @@ body {
 
 /* Layout elements */
 .app-container {
-  max-width: 480px;
+  max-width: 940px;
   margin: 0 auto;
   min-height: 100vh;
   display: flex;
@@ -656,6 +736,43 @@ body {
   gap: 10px;
   position: relative;
   z-index: 2;
+  background-color: #050608;
+  background-image: 
+    linear-gradient(90deg, transparent 8px, #8c6621 8px, #8c6621 11px, transparent 11px, transparent calc(100% - 11px), #8c6621 calc(100% - 11px), #8c6621 calc(100% - 8px), transparent calc(100% - 8px)),
+    repeating-linear-gradient(180deg, #090a0c 0px, #090a0c 58px, #050608 58px, #050608 68px);
+  background-attachment: local;
+  box-shadow: inset 0 8px 16px rgba(0, 0, 0, 0.95);
+}
+
+/* Custom Vintage Scrollbar for Song List */
+.song-list-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.song-list-scroll::-webkit-scrollbar-track {
+  background: #090a0d; /* Recessed dark metal channel */
+  border-left: 1px solid #2d2620; /* Aged copper channel wall */
+  box-shadow: inset 1.5px 0 3px rgba(0, 0, 0, 0.95);
+  border-radius: 4px;
+}
+
+.song-list-scroll::-webkit-scrollbar-thumb {
+  /* Brushed steel cylinder thumb */
+  background: conic-gradient(from 0deg, #8c97a5, #d8dee8, #8c97a5, #404652, #8c97a5);
+  border: 1px solid #1a1c22;
+  border-radius: 4px;
+  box-shadow: 
+    0 1.5px 3px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.song-list-scroll::-webkit-scrollbar-thumb:hover {
+  /* Glows amber neon when active/hovered! */
+  background: var(--color-amber) !important;
+  box-shadow: var(--color-amber-glow) !important;
+  border-color: #ff9900;
 }
 
 .song-item {
@@ -1181,7 +1298,7 @@ body {
 
 /* Slightly Larger Play Square Button */
 .play-btn-square {
-  width: 86px;
+  width: 172px; /* Rectangular & 2x wider */
   height: 86px;
   background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 25%, #94a3b8 50%, #cbd5e1 75%, #f8fafc 100%);
   border: 4px solid #64748b;
@@ -1239,6 +1356,61 @@ body {
   filter: brightness(0.4) contrast(1.15) saturate(0.85);
 }
 
+@keyframes ambient-flicker {
+  0%, 100% {
+    filter: brightness(1.7) contrast(1.15) saturate(1.1);
+    opacity: 0.99;
+  }
+  4% {
+    filter: brightness(1.35) contrast(1.08) saturate(1.02);
+    opacity: 0.91;
+  }
+  7% {
+    filter: brightness(1.75) contrast(1.18) saturate(1.13);
+    opacity: 0.99;
+  }
+  10% {
+    filter: brightness(1.4) contrast(1.1) saturate(1.05);
+    opacity: 0.93;
+  }
+  14% {
+    filter: brightness(1.7) contrast(1.15) saturate(1.1);
+    opacity: 0.98;
+  }
+  48% {
+    filter: brightness(1.68) contrast(1.14) saturate(1.1);
+    opacity: 0.97;
+  }
+  50% {
+    filter: brightness(1.25) contrast(1.02) saturate(0.98);
+    opacity: 0.86;
+  }
+  53% {
+    filter: brightness(1.7) contrast(1.15) saturate(1.1);
+    opacity: 0.98;
+  }
+  56% {
+    filter: brightness(1.5) contrast(1.1) saturate(1.06);
+    opacity: 0.92;
+  }
+  59% {
+    filter: brightness(1.75) contrast(1.18) saturate(1.13);
+    opacity: 0.99;
+  }
+  88% {
+    filter: brightness(1.7) contrast(1.15) saturate(1.1);
+    opacity: 0.99;
+  }
+  91% {
+    filter: brightness(1.3) contrast(1.05) saturate(1.0);
+    opacity: 0.89;
+  }
+  94% {
+    filter: brightness(1.7) contrast(1.15) saturate(1.1);
+    opacity: 0.98;
+  }
+}
+
 /* Ensure bright digital indicators, LED screens, neon visualizers, and glass bulbs pop out brilliantly in the dark! */
 .night-drive-active .digital-display,
 .night-drive-active .vintage-toggle-light.active,
@@ -1249,4 +1421,218 @@ body {
 .night-drive-active .horizontal-thumbwheel-slot {
   filter: brightness(1.7) contrast(1.15) saturate(1.1);
   transition: filter 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.night-drive-active.neon-flicker-active .digital-display,
+.night-drive-active.neon-flicker-active .vintage-toggle-light.active,
+.night-drive-active.neon-flicker-active .share-vu-btn,
+.night-drive-active.neon-flicker-active canvas,
+.night-drive-active.neon-flicker-active .play-btn-square,
+.night-drive-active.neon-flicker-active .cb-toggle-handle,
+.night-drive-active.neon-flicker-active .horizontal-thumbwheel-slot {
+  animation: ambient-flicker 8s infinite;
+  transition: filter 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* ==========================================================================
+   HIGH-FIDELITY 3D STITCHED KAPTON/NYLON CONTRAST SEAMS
+   ========================================================================== */
+
+/* Make sure all targeted containers are positioned relatively for pseudo-elements */
+.digital-display,
+.recessed-cutout,
+.dashboard-bezel,
+.header-bezel-integrated,
+.horizontal-thumbwheel-slot {
+  position: relative !important;
+}
+
+/* 3D Stitched Kapton (nylon orange-gold) thread inside a deep physical sewing groove */
+.digital-display::before,
+.recessed-cutout::before,
+.dashboard-bezel::before,
+.header-bezel-integrated::before {
+  content: '';
+  position: absolute;
+  top: 3.5px;
+  left: 3.5px;
+  right: 3.5px;
+  bottom: 3.5px;
+  border: 1.5px dashed var(--color-amber) !important; /* Thick orange-gold Kapton contrast thread */
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.88;
+  z-index: 4;
+  box-shadow: 0 0.8px 1.5px rgba(0, 0, 0, 0.95); /* Shadow simulates thread physical elevation */
+}
+
+/* Special integration for the volume thumbwheel slot (where ::before is used for glass reflection) */
+.horizontal-thumbwheel-slot::after {
+  content: '';
+  position: absolute;
+  top: 3.5px;
+  left: 3.5px;
+  right: 3.5px;
+  bottom: 3.5px;
+  border: 1.5px dashed var(--color-amber) !important;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.88;
+  z-index: 4;
+  box-shadow: 0 0.8px 1.5px rgba(0, 0, 0, 0.95);
+}
+
+/* Recessed physical sewing groove styling overrides for integrated headers and scrollers */
+.header-bezel-integrated {
+  border: 2.2px solid #161310 !important; /* Deep dark physical groove */
+  background: rgba(0, 0, 0, 0.45) !important;
+  border-radius: 6px;
+  padding: 12px 16px !important;
+  margin-bottom: 4px;
+  box-shadow: 
+    inset 0 3px 8px rgba(0, 0, 0, 0.92),
+    0 1px 1px rgba(255, 255, 255, 0.06) !important;
+}
+
+.dashboard-bezel {
+  border: 2.2px solid #161310 !important; /* Deep dark physical groove */
+  border-radius: 6px;
+  box-shadow: 
+    inset 0 3px 8px rgba(0, 0, 0, 0.92),
+    0 1px 1px rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Night drive dimmer support: ensure stitched threads glow vibrantly in the dark cab! */
+.night-drive-active .digital-display::before,
+.night-drive-active .recessed-cutout::before,
+.night-drive-active .dashboard-bezel::before,
+.night-drive-active .header-bezel-integrated::before,
+.night-drive-active .horizontal-thumbwheel-slot::after {
+  filter: brightness(1.6) saturate(1.2);
+  opacity: 0.95;
+}
+
+/* ==========================================================================
+   MOBILE PORTRAIT RESPONSIVE OPTIMIZATIONS (max-width: 600px)
+   ========================================================================== */
+@media (max-width: 600px) {
+  /* 1. App Container & Console Bezel Layout */
+  .app-container {
+    padding: 8px;
+    gap: 12px;
+  }
+
+  .main-dashboard-console {
+    padding: 14px 12px;
+    gap: 14px;
+    border-width: 4.5px; /* Thinner border to conserve screen space */
+    border-radius: 8px;
+  }
+
+  /* 2. Brass rivets placement adjustment */
+  .brass-rivet {
+    width: 6px;
+    height: 6px;
+  }
+
+  /* 3. Header spacing */
+  .header-bezel-integrated {
+    padding: 8px 10px !important;
+  }
+  
+  .header-title {
+    font-size: 11px;
+    letter-spacing: 0.8px;
+  }
+
+  /* 4. Visualizer canvas height */
+  .digital-display.carbon-panel {
+    height: 135px !important;
+  }
+
+  .share-vu-btn {
+    font-size: 7px;
+    padding: 3px 6px;
+    top: 6px !important;
+  }
+  
+  .share-vu-btn[style*="left"] {
+    left: 6px !important;
+  }
+  .share-vu-btn[style*="right"] {
+    right: 6px !important;
+  }
+
+  /* 5. Middle Dashboard controls section (stack vertically on mobile) */
+  .dashboard-middle-section {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+  }
+
+  /* Left column (Volume & Progress) takes full width */
+  .dashboard-sliders-col {
+    width: 100% !important;
+  }
+
+  /* Right column (3 toggle switches panel) centers itself horizontally */
+  .dashboard-middle-section > .vintage-toggle-panel {
+    align-self: center !important;
+    gap: 16px !important;
+  }
+
+  /* 6. Playback controls sizing */
+  .dashboard-playback-strip {
+    gap: 16px !important; /* Thinner gap to fit comfortably on small screens */
+    margin: 4px 0 !important;
+  }
+
+  /* Rectangular double-width Play button scale down */
+  .play-btn-square {
+    width: 116px !important;
+    height: 58px !important;
+    font-size: 24px !important;
+    border-width: 3px !important;
+    border-bottom-width: 5px !important;
+    border-radius: 8px !important;
+  }
+
+  /* Square Prev/Next buttons scale down */
+  .industrial-btn-square {
+    width: 58px !important;
+    height: 58px !important;
+    font-size: 20px !important;
+    border-width: 3px !important;
+    border-bottom-width: 5px !important;
+    border-radius: 8px !important;
+  }
+
+  /* 7. Song Queue container and scroll area */
+  .songs-container {
+    height: 300px !important; /* Slightly shorter on phone to avoid overflow */
+  }
+
+  .song-item {
+    padding: 8px 10px !important;
+    min-height: 48px !important;
+    gap: 10px !important;
+  }
+
+  .song-number {
+    font-size: 11px !important;
+    width: 16px !important;
+  }
+
+  .song-title {
+    font-size: 11px !important;
+  }
+
+  .song-size {
+    font-size: 9px !important;
+  }
+
+  .song-action-btn {
+    padding: 3px !important;
+    font-size: 10px !important;
+  }
 }
