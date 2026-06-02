@@ -535,6 +535,22 @@ app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => 
         .replace(/[_-]/g, ' ')
         .trim();
 
+      // Check for duplicate in database
+      const isDuplicate = playlist.some(s => 
+        s.title.toLowerCase() === title.toLowerCase() || 
+        s.originalName.toLowerCase() === originalName.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        console.log(`⚠️ Skipping duplicate track: "${title}" (${originalName})`);
+        fs.unlink(file.path, (err) => {
+          if (err && err.code !== 'ENOENT') {
+            console.error(`Error unlinking temp duplicate file ${file.path}:`, err);
+          }
+        });
+        continue;
+      }
+
       // Extract embedded album artwork if available
       let artworkUrl = null;
       let duration = 0;
@@ -612,6 +628,10 @@ app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => 
 
       playlist.push(newSong);
       addedSongs.push(newSong);
+    }
+
+    if (addedSongs.length === 0 && req.files && req.files.length > 0) {
+      return res.status(400).json({ error: 'Усі обрані треки вже є у плейлисті!' });
     }
 
     writeDatabase(playlist);
