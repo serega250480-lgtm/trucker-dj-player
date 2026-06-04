@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { triggerTactileFeedback } from '../utils/tactile';
+import startScreenImg from '../assets/start_screen.png';
 
 export default function StartScreen({ onStart, audioContextRef }) {
   const [ignitionState, setIgnitionState] = useState('idle'); // idle | cranking | fired | fading
@@ -150,7 +151,13 @@ export default function StartScreen({ onStart, audioContextRef }) {
 
   return (
     <div className={overlayClass}>
-      <div className="start-screen-content">
+      <div className="cover-wrapper">
+        <img 
+          src={startScreenImg} 
+          className="cover-img" 
+          alt="start screen background" 
+        />
+        
         {/* Decorative radial glows overlaying target image spots */}
         <div className="ignition-glow-effect" />
 
@@ -162,20 +169,14 @@ export default function StartScreen({ onStart, audioContextRef }) {
             title="Запустити двигун"
           />
         )}
+      </div>
 
-        {/* Top Spacer */}
-        <div style={{ height: '80px' }} />
-
-        {/* Middle Spacer */}
-        <div style={{ flex: 1 }} />
-
-        {/* Status Text HUD overlay */}
-        <div className="start-screen-prompt">
-          {ignitionState === 'idle' && '🔑 НАДУШІТЬ КНОПКУ СТАРТ ДЛЯ ЗАПУСКУ'}
-          {ignitionState === 'cranking' && '⌛ ЗАПУСК СТАРТЕРА...'}
-          {ignitionState === 'fired' && '💚 ДВИГУН ЗАВЕДЕНО!'}
-          {ignitionState === 'fading' && '🚚 ВХІД У КАБІНУ...'}
-        </div>
+      {/* Status Text HUD overlay positioned at the viewport bottom (safe from cropping) */}
+      <div className="start-screen-prompt">
+        {ignitionState === 'idle' && '🔑 НАДУШІТЬ КНОПКУ СТАРТ ДЛЯ ЗАПУСКУ'}
+        {ignitionState === 'cranking' && '⌛ ЗАПУСК СТАРТЕРА...'}
+        {ignitionState === 'fired' && '💚 ДВИГУН ЗАВЕДЕНО!'}
+        {ignitionState === 'fading' && '🚚 ВХІД У КАБІНУ...'}
       </div>
     </div>
   );

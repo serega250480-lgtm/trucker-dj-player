@@ -1659,66 +1659,38 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
+  overflow: hidden;
   user-select: none;
   transition: opacity 0.8s ease-in-out, visibility 0.8s ease-in-out;
 }
 
-.start-screen-content {
+.cover-wrapper {
   position: relative;
-  width: 100%;
-  height: 100%;
-  max-width: 562px;
   aspect-ratio: 9/16;
-  background-image: url('./assets/start_screen.png');
-  background-size: contain;
-  background-position: center;
-  background-repeat: no-repeat;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: center;
-  padding: 40px 20px;
-  box-sizing: border-box;
 }
 
 @media (min-aspect-ratio: 9/16) {
-  .start-screen-content {
-    height: 100vh;
-    width: auto;
+  /* Viewport is wider than 9/16 (desktop/tablets) - match width, crop top/bottom */
+  .cover-wrapper {
+    width: 100vw;
+    height: calc(100vw * 16 / 9);
   }
 }
 
 @media (max-aspect-ratio: 9/16) {
-  .start-screen-content {
-    width: 100vw;
-    height: auto;
+  /* Viewport is taller than 9/16 (smartphones) - match height, crop sides */
+  .cover-wrapper {
+    height: 100vh;
+    width: calc(100vh * 9 / 16);
   }
 }
 
-/* Clicking target button hotspot */
-.start-button-hotspot {
-  position: absolute;
-  top: 58%;
-  left: 77.3%;
-  transform: translate(-50%, -50%);
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  cursor: pointer;
-  z-index: 10001;
-  background: rgba(255, 255, 255, 0);
-  outline: none;
-  -webkit-tap-highlight-color: transparent;
-  transition: background 0.2s ease-in-out;
-}
-
-.start-button-hotspot:hover {
-  background: rgba(255, 210, 148, 0.08);
-  box-shadow: 0 0 20px rgba(255, 210, 148, 0.15);
-}
-
-.start-button-hotspot:active {
-  background: rgba(0, 255, 102, 0.12);
+.cover-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  object-fit: cover;
 }
 
 .start-screen-overlay.fade-out {
@@ -1727,7 +1699,7 @@ body {
   pointer-events: none;
 }
 
-/* Pulsing text indicator at the bottom */
+/* Pulsing text indicator at the bottom (safe from cropping) */
 .start-screen-prompt {
   font-family: var(--font-sans);
   font-weight: 900;
@@ -1736,21 +1708,26 @@ body {
   letter-spacing: 1.5px;
   text-shadow: 0 0 10px rgba(255, 210, 148, 0.4), 0 2px 4px rgba(0, 0, 0, 0.95);
   animation: pulse-ignition-prompt 1.8s infinite ease-in-out;
-  background: rgba(0, 0, 0, 0.55);
-  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.65);
+  padding: 8px 20px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 210, 148, 0.2);
-  margin-bottom: 20px;
+  border: 1px solid rgba(255, 210, 148, 0.25);
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10002;
+  white-space: nowrap;
 }
 
 @keyframes pulse-ignition-prompt {
   0%, 100% {
     opacity: 0.5;
-    transform: scale(0.97);
+    transform: scale(0.97) translateX(-50%);
   }
   50% {
     opacity: 1;
-    transform: scale(1.03);
+    transform: scale(1.03) translateX(-50%);
     color: #ffaa3b;
     text-shadow: 0 0 15px rgba(255, 170, 59, 0.7), 0 2px 4px rgba(0, 0, 0, 0.95);
   }
@@ -1787,5 +1764,31 @@ body {
 
 .start-screen-overlay.fired .ignition-glow-effect {
   background: radial-gradient(circle at 75% 58%, rgba(0, 255, 102, 0.5) 0%, transparent 60%);
+}
+
+/* Clicking target button hotspot scaled proportionally inside 9:16 wrapper */
+.start-button-hotspot {
+  position: absolute;
+  top: 58%;
+  left: 77.3%;
+  transform: translate(-50%, -50%);
+  width: 21.3%; /* ~120px on standard screens */
+  height: 12%;  /* Maintains circle shape on 9/16 aspect ratio wrapper */
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 10001;
+  background: rgba(255, 255, 255, 0);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s ease-in-out;
+}
+
+.start-button-hotspot:hover {
+  background: rgba(255, 210, 148, 0.08);
+  box-shadow: 0 0 20px rgba(255, 210, 148, 0.15);
+}
+
+.start-button-hotspot:active {
+  background: rgba(0, 255, 102, 0.12);
 }
 
