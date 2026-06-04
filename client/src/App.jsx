@@ -4,11 +4,14 @@ import SongList from './components/SongList';
 import ShareModal from './components/ShareModal';
 import Visualizer from './components/Visualizer';
 import ExhaustSmoke from './components/ExhaustSmoke';
+import StartScreen from './components/StartScreen';
 import { triggerTactileFeedback } from './utils/tactile';
+import logoImg from './assets/logo.png';
 
 export default function App() {
   const [songs, setSongs] = useState([]);
   const [currentSongIndex, setCurrentSongIndex] = useState(-1);
+  const [showStartScreen, setShowStartScreen] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.8);
   const [crossfadeDuration, setCrossfadeDuration] = useState(5); // default 5 seconds
@@ -60,8 +63,8 @@ export default function App() {
 
   // Initialize Web Audio API on user gesture to get real frequency data
   const initAudioContext = () => {
-    if (audioContextRef.current) {
-      if (audioContextRef.current.state === 'suspended') {
+    if (analyserRef.current) {
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
         audioContextRef.current.resume();
       }
       return;
@@ -69,7 +72,7 @@ export default function App() {
 
     try {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioContextClass();
+      const ctx = audioContextRef.current || new AudioContextClass();
       audioContextRef.current = ctx;
 
       const ana = ctx.createAnalyser();
@@ -89,6 +92,11 @@ export default function App() {
     } catch (e) {
       console.warn('Failed to initialize real AudioContext:', e);
     }
+  };
+
+  const handleStart = (ctx) => {
+    setShowStartScreen(false);
+    initAudioContext();
   };
 
   // Track which player is currently playing the primary song ('A' or 'B')
@@ -604,6 +612,12 @@ export default function App() {
 
   return (
     <div className={`app-container ${isNightDrive ? 'night-drive-active' : ''} ${isNightDrive && isFlickerActive ? 'neon-flicker-active' : ''}`}>
+      {showStartScreen && (
+        <StartScreen 
+          onStart={handleStart} 
+          audioContextRef={audioContextRef} 
+        />
+      )}
       
       <div className="main-dashboard-console">
         {/* Brass rivets in the four corners of the main wooden dashboard console */}
@@ -619,7 +633,7 @@ export default function App() {
           <ExhaustSmoke isPlaying={isPlaying} analyser={analyser} />
           
           <h1 className="hud-title" style={{ margin: 0, fontSize: '11px', fontWeight: '900', letterSpacing: '1.5px', color: '#ffd294', textShadow: '0 1.5px 2px rgba(0,0,0,0.95), 0 0.5px 0.5px rgba(0,0,0,0.6)', textTransform: 'uppercase', fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center', gap: '6px', zIndex: 3 }}>
-            <span>🚚</span> ROAD DJ STAGE-1
+            <img src={logoImg} alt="ROAD DJ logo" style={{ width: '16px', height: '16px', objectFit: 'contain', filter: 'drop-shadow(0 0 2px rgba(255,210,148,0.3))' }} /> ROAD DJ STAGE-1
           </h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', zIndex: 3 }}>
             <span className="cb-toggle-label" style={{ fontSize: '9px', color: '#ffd294', textShadow: '0 1px 2px rgba(0,0,0,0.95)', fontFamily: 'var(--font-serif)' }}>ONLINE</span>

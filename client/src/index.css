@@ -1644,3 +1644,148 @@ body {
     font-size: 10px !important;
   }
 }
+
+/* ==========================================================================
+   START IGNITION SCREEN (MOBILE SPLASH OVERLAY)
+   ========================================================================== */
+.start-screen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  user-select: none;
+  transition: opacity 0.8s ease-in-out, visibility 0.8s ease-in-out;
+}
+
+.start-screen-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 562px;
+  aspect-ratio: 9/16;
+  background-image: url('./assets/start_screen.png');
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 40px 20px;
+  box-sizing: border-box;
+}
+
+@media (min-aspect-ratio: 9/16) {
+  .start-screen-content {
+    height: 100vh;
+    width: auto;
+  }
+}
+
+@media (max-aspect-ratio: 9/16) {
+  .start-screen-content {
+    width: 100vw;
+    height: auto;
+  }
+}
+
+/* Clicking target button hotspot */
+.start-button-hotspot {
+  position: absolute;
+  top: 58%;
+  left: 77.3%;
+  transform: translate(-50%, -50%);
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 10001;
+  background: rgba(255, 255, 255, 0);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s ease-in-out;
+}
+
+.start-button-hotspot:hover {
+  background: rgba(255, 210, 148, 0.08);
+  box-shadow: 0 0 20px rgba(255, 210, 148, 0.15);
+}
+
+.start-button-hotspot:active {
+  background: rgba(0, 255, 102, 0.12);
+}
+
+.start-screen-overlay.fade-out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Pulsing text indicator at the bottom */
+.start-screen-prompt {
+  font-family: var(--font-sans);
+  font-weight: 900;
+  font-size: 14px;
+  color: #ffd294;
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 10px rgba(255, 210, 148, 0.4), 0 2px 4px rgba(0, 0, 0, 0.95);
+  animation: pulse-ignition-prompt 1.8s infinite ease-in-out;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 210, 148, 0.2);
+  margin-bottom: 20px;
+}
+
+@keyframes pulse-ignition-prompt {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.97);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.03);
+    color: #ffaa3b;
+    text-shadow: 0 0 15px rgba(255, 170, 59, 0.7), 0 2px 4px rgba(0, 0, 0, 0.95);
+  }
+}
+
+/* Vibrating shake effect while engine is cranking */
+.start-screen-overlay.cranking {
+  animation: ignition-crank-shake 0.12s infinite linear;
+}
+
+@keyframes ignition-crank-shake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(2px, 1.5px) rotate(0.1deg); }
+  50% { transform: translate(-1.5px, -2px) rotate(-0.1deg); }
+  75% { transform: translate(2px, -1px) rotate(0.05deg); }
+}
+
+/* Pulsing green ignition glow indicator overlaying the visualizer area */
+.ignition-glow-effect {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(0, 255, 102, 0) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 10000;
+  transition: background 0.4s ease-in-out;
+}
+
+.start-screen-overlay.cranking .ignition-glow-effect {
+  background: radial-gradient(circle at 75% 58%, rgba(255, 170, 59, 0.25) 0%, transparent 60%);
+}
+
+.start-screen-overlay.fired .ignition-glow-effect {
+  background: radial-gradient(circle at 75% 58%, rgba(0, 255, 102, 0.5) 0%, transparent 60%);
+}
+
