@@ -1009,7 +1009,14 @@ export default function Visualizer({
           if (showToast) showToast('ПОМИЛКА ОБРОБКИ ФАЙЛІВ');
         }
       } else {
-        if (showToast) showToast('ПОМИЛКА ЗАВАНТАЖЕННЯ');
+        let errMsg = 'ПОМИЛКА ЗАВАНТАЖЕННЯ';
+        try {
+          const errData = JSON.parse(xhr.responseText);
+          if (errData && errData.error) {
+            errMsg = errData.error.toUpperCase();
+          }
+        } catch (e) {}
+        if (showToast) showToast(errMsg);
       }
     };
 
