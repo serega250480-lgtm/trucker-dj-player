@@ -1798,18 +1798,33 @@ body {
 .album-tabs-container {
   display: flex;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px 12px 12px 12px; /* Extra bottom padding so tabs don't touch scrollbar */
   background: #110d0a; /* Deep dark wood/leatherette tray look */
   border-bottom: 1px solid #2d221a;
   overflow-x: auto;
-  scrollbar-width: none; /* Hide scrollbar for cleaner look */
-  -ms-overflow-style: none;
+  scrollbar-color: #3a2e25 #110d0a; /* For Firefox custom thin scrollbar colors */
+  scrollbar-width: thin; /* Show thin scrollbar on Firefox */
   position: relative;
   z-index: 2;
 }
 
+/* Scrollbar for Album Tabs Container */
 .album-tabs-container::-webkit-scrollbar {
-  display: none;
+  height: 4px; /* Thin scrollbar */
+}
+
+.album-tabs-container::-webkit-scrollbar-track {
+  background: #110d0a;
+}
+
+.album-tabs-container::-webkit-scrollbar-thumb {
+  background: #3a2e25; /* Dark bronze look */
+  border-radius: 2px;
+}
+
+.album-tabs-container::-webkit-scrollbar-thumb:hover {
+  background: var(--color-amber);
+  box-shadow: var(--color-amber-glow);
 }
 
 .album-tab {

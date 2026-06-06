@@ -59,6 +59,13 @@ export default function SongList({
   const dragOverIndexRef = React.useRef(dragOverIndex);
   dragOverIndexRef.current = dragOverIndex;
 
+  // Horizontal Album Tabs scrolling refs & state
+  const tabsContainerRef = React.useRef(null);
+  const dragStartLeft = React.useRef(0);
+  const dragStartX = React.useRef(0);
+  const isDraggingTabs = React.useRef(false);
+  const hasDraggedTabs = React.useRef(false);
+
   React.useEffect(() => {
     const handleDocumentClick = (e) => {
       if (!e.target.closest('.album-dropdown') && !e.target.closest('.tag-btn')) {
@@ -70,6 +77,67 @@ export default function SongList({
       document.removeEventListener('click', handleDocumentClick);
     };
   }, []);
+
+  // Tabs drag-to-scroll & wheel-to-scroll listeners
+  React.useEffect(() => {
+    const container = tabsContainerRef.current;
+    if (!container) return;
+
+    // Wheel listener (passive: false to block vertical page scroll)
+    const onWheel = (e) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        container.scrollLeft += e.deltaY;
+      }
+    };
+
+    const handleDocumentMouseMove = (e) => {
+      if (!isDraggingTabs.current) return;
+      const dx = e.clientX - dragStartX.current;
+      if (Math.abs(dx) > 3) {
+        hasDraggedTabs.current = true;
+      }
+      container.scrollLeft = dragStartLeft.current - dx;
+    };
+
+    const handleDocumentMouseUp = () => {
+      if (!isDraggingTabs.current) return;
+      isDraggingTabs.current = false;
+      container.style.cursor = 'grab';
+      container.style.userSelect = 'auto';
+    };
+
+    container.addEventListener('wheel', onWheel, { passive: false });
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+
+    return () => {
+      container.removeEventListener('wheel', onWheel);
+      document.removeEventListener('mousemove', handleDocumentMouseMove);
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+    };
+  }, []);
+
+  const handleTabsMouseDown = (e) => {
+    if (e.button !== 0) return; // Only left click
+    const container = tabsContainerRef.current;
+    if (!container) return;
+    isDraggingTabs.current = true;
+    hasDraggedTabs.current = false;
+    dragStartX.current = e.clientX;
+    dragStartLeft.current = container.scrollLeft;
+    container.style.cursor = 'grabbing';
+    container.style.userSelect = 'none';
+  };
+
+  const handleTabClick = (tabId) => {
+    if (hasDraggedTabs.current) {
+      hasDraggedTabs.current = false; // reset
+      return;
+    }
+    triggerTactileFeedback('button_press');
+    setActiveAlbum(tabId);
+  };
 
   const getReorderedGlobalIds = (allSongs, fileSongs, fromIdx, toIdx) => {
     if (activeAlbum === 'ALL') {
@@ -341,7 +409,12 @@ export default function SongList({
         <span style={{ fontSize: '9px', color: 'var(--color-amber)' }}>{filteredSongs.length} ТРЕКІВ</span>
       </div>
 
-      <div className="album-tabs-container">
+      <div 
+        className="album-tabs-container"
+        ref={tabsContainerRef}
+        onMouseDown={handleTabsMouseDown}
+        style={{ cursor: 'grab' }}
+      >
         {ALBUM_TABS.map((tab) => {
           const isActive = tab.id === activeAlbum;
           const songCount = tab.id === 'ALL' 
@@ -352,10 +425,7 @@ export default function SongList({
             <button
               key={tab.id}
               className={`album-tab ${isActive ? 'active' : ''}`}
-              onClick={() => {
-                triggerTactileFeedback('button_press');
-                setActiveAlbum(tab.id);
-              }}
+              onClick={() => handleTabClick(tab.id)}
             >
               <span className="tab-label">{tab.label}</span>
               <span className="tab-count">({songCount})</span>
