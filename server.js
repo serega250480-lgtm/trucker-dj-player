@@ -8,6 +8,13 @@ const QRCode = require('qrcode');
 const mm = require('music-metadata');
 const { google } = require('googleapis');
 
+const ALLOWED_ALBUMS = [
+  'UKRAINIAN VIBE MUSIC, Vol. 1',
+  'UKRAINIAN VIBE MUSIC, Vol. 2',
+  'UKRAINIAN VIBE MUSIC, Vol. 3',
+  'UKRAINIAN ROAD MUSIC, Vol. 1'
+];
+
 const app = express();
 const PORT = process.env.PORT || 3080;
 
@@ -612,6 +619,10 @@ app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => 
       }
 
       currentMaxOrder++;
+      let album = req.body.album || null;
+      if (album && !ALLOWED_ALBUMS.includes(album)) {
+        album = null;
+      }
       const newSong = {
         id: 'song_' + Date.now() + '_' + Math.round(Math.random() * 1000000),
         title: title,
@@ -622,6 +633,7 @@ app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => 
         duration: duration,
         order: currentMaxOrder,
         createdAt: new Date().toISOString(),
+        album: album,
         ...(gdriveFileId && { gdriveFileId }),
         ...(gdriveArtworkFileId && { gdriveArtworkFileId })
       };
@@ -724,6 +736,27 @@ app.delete('/api/playlist/:id', (req, res) => {
   }
 
   res.json({ success: true, message: 'Song deleted successfully' });
+});
+
+// 4.5. Update song album
+app.put('/api/playlist/:id/album', (req, res) => {
+  const { id } = req.params;
+  let { album } = req.body;
+
+  const playlist = readDatabase();
+  const songIndex = playlist.findIndex(s => s.id === id);
+  if (songIndex === -1) {
+    return res.status(404).json({ error: 'Song not found' });
+  }
+
+  if (album && !ALLOWED_ALBUMS.includes(album)) {
+    album = null;
+  }
+
+  playlist[songIndex].album = album || null;
+  writeDatabase(playlist);
+
+  res.json({ success: true, song: playlist[songIndex] });
 });
 
 // 5. Get sharing details (Local network IP & QR Code)

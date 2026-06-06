@@ -1,10 +1,35 @@
 import React from 'react';
 import { triggerTactileFeedback } from '../utils/tactile';
 
-export default function SongList({ songs, currentSongId, onSelectSong, onDeleteSong, onReorderSongs }) {
+const ALLOWED_ALBUMS = [
+  'UKRAINIAN VIBE MUSIC, Vol. 1',
+  'UKRAINIAN VIBE MUSIC, Vol. 2',
+  'UKRAINIAN VIBE MUSIC, Vol. 3',
+  'UKRAINIAN ROAD MUSIC, Vol. 1'
+];
+
+const ALBUM_TABS = [
+  { id: 'ALL', label: 'Усі треки' },
+  { id: 'UKRAINIAN VIBE MUSIC, Vol. 1', label: 'VIBE Vol. 1' },
+  { id: 'UKRAINIAN VIBE MUSIC, Vol. 2', label: 'VIBE Vol. 2' },
+  { id: 'UKRAINIAN VIBE MUSIC, Vol. 3', label: 'VIBE Vol. 3' },
+  { id: 'UKRAINIAN ROAD MUSIC, Vol. 1', label: 'ROAD Vol. 1' }
+];
+
+export default function SongList({ 
+  songs, 
+  currentSongId, 
+  onSelectSong, 
+  onDeleteSong, 
+  onReorderSongs,
+  activeAlbum,
+  setActiveAlbum,
+  onUpdateSongAlbum
+}) {
   const [draggedIndex, setDraggedIndex] = React.useState(null);
   const [dragOverIndex, setDragOverIndex] = React.useState(null);
   const [dragOffset, setDragOffset] = React.useState(0);
+  const [activeDropdownSongId, setActiveDropdownSongId] = React.useState(null);
   
   const dragStartY = React.useRef(0);
   const dragStartIndex = React.useRef(null);
@@ -21,11 +46,57 @@ export default function SongList({ songs, currentSongId, onSelectSong, onDeleteS
   const lastClientY = React.useRef(0);
   const scrollLoopId = React.useRef(null);
 
+  const filteredSongs = activeAlbum === 'ALL' 
+    ? songs 
+    : songs.filter(s => s.album === activeAlbum);
+
   const songsRef = React.useRef(songs);
   songsRef.current = songs;
+
+  const filteredSongsRef = React.useRef(filteredSongs);
+  filteredSongsRef.current = filteredSongs;
   
   const dragOverIndexRef = React.useRef(dragOverIndex);
   dragOverIndexRef.current = dragOverIndex;
+
+  React.useEffect(() => {
+    const handleDocumentClick = (e) => {
+      if (!e.target.closest('.album-dropdown') && !e.target.closest('.tag-btn')) {
+        setActiveDropdownSongId(null);
+      }
+    };
+    document.addEventListener('click', handleDocumentClick);
+    return () => {
+      document.removeEventListener('click', handleDocumentClick);
+    };
+  }, []);
+
+  const getReorderedGlobalIds = (allSongs, fileSongs, fromIdx, toIdx) => {
+    if (activeAlbum === 'ALL') {
+      const reordered = [...allSongs];
+      const [removed] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, removed);
+      return reordered.map(s => s.id);
+    }
+
+    const targetAlbumIndices = [];
+    allSongs.forEach((song, idx) => {
+      if (song.album === activeAlbum) {
+        targetAlbumIndices.push(idx);
+      }
+    });
+
+    const newFiltered = [...fileSongs];
+    const [removed] = newFiltered.splice(fromIdx, 1);
+    newFiltered.splice(toIdx, 0, removed);
+
+    const newGlobal = [...allSongs];
+    targetAlbumIndices.forEach((globalIdx, filteredIdx) => {
+      newGlobal[globalIdx] = newFiltered[filteredIdx];
+    });
+
+    return newGlobal.map(s => s.id);
+  };
 
   const startScrollLoop = React.useCallback(() => {
     if (scrollLoopId.current) return;
@@ -62,7 +133,7 @@ export default function SongList({ songs, currentSongId, onSelectSong, onDeleteS
         
         setDragOffset(totalOffset);
         
-        const targetIndex = Math.max(0, Math.min(songsRef.current.length - 1, dragStartIndex.current + Math.round(totalOffset / 68)));
+        const targetIndex = Math.max(0, Math.min(filteredSongsRef.current.length - 1, dragStartIndex.current + Math.round(totalOffset / 68)));
         if (dragOverIndexRef.current !== targetIndex) {
           triggerTactileFeedback('dial_tick');
           setDragOverIndex(targetIndex);
@@ -113,7 +184,7 @@ export default function SongList({ songs, currentSongId, onSelectSong, onDeleteS
       setDragOffset(totalOffset);
 
       // Symmetrical mathematical slot calculation (card height 58px + gap 10px = 68px)
-      const targetIndex = Math.max(0, Math.min(songsRef.current.length - 1, dragStartIndex.current + Math.round(totalOffset / 68)));
+      const targetIndex = Math.max(0, Math.min(filteredSongsRef.current.length - 1, dragStartIndex.current + Math.round(totalOffset / 68)));
       if (dragOverIndexRef.current !== targetIndex) {
         triggerTactileFeedback('dial_tick');
         setDragOverIndex(targetIndex);
@@ -137,11 +208,8 @@ export default function SongList({ songs, currentSongId, onSelectSong, onDeleteS
       
       if (wasDragging && startIdx !== null && overIdx !== null && startIdx !== overIdx) {
         triggerTactileFeedback('button_press');
-        const reorderedSongs = [...songsRef.current];
-        const [removed] = reorderedSongs.splice(startIdx, 1);
-        reorderedSongs.splice(overIdx, 0, removed);
-        
-        onReorderSongs(reorderedSongs.map(s => s.id));
+        const ids = getReorderedGlobalIds(songsRef.current, filteredSongsRef.current, startIdx, overIdx);
+        onReorderSongs(ids);
       }
       
       if (wasDragging) {
@@ -243,18 +311,14 @@ export default function SongList({ songs, currentSongId, onSelectSong, onDeleteS
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  const moveSong = (index, direction) => {
+  const moveSong = (filteredIndex, direction) => {
     triggerTactileFeedback('dial_tick');
-    const newSongs = [...songs];
-    const targetIndex = index + direction;
+    const targetFilteredIndex = filteredIndex + direction;
     
-    if (targetIndex < 0 || targetIndex >= songs.length) return;
+    if (targetFilteredIndex < 0 || targetFilteredIndex >= filteredSongs.length) return;
     
-    const temp = newSongs[index];
-    newSongs[index] = newSongs[targetIndex];
-    newSongs[targetIndex] = temp;
-    
-    onReorderSongs(newSongs.map(song => song.id));
+    const ids = getReorderedGlobalIds(songs, filteredSongs, filteredIndex, targetFilteredIndex);
+    onReorderSongs(ids);
   };
 
   return (
@@ -274,11 +338,34 @@ export default function SongList({ songs, currentSongId, onSelectSong, onDeleteS
         }}
       >
         <span>ЧЕРГА ВІДТВОРЕННЯ</span>
-        <span style={{ fontSize: '9px', color: 'var(--color-amber)' }}>{songs.length} ТРЕКІВ</span>
+        <span style={{ fontSize: '9px', color: 'var(--color-amber)' }}>{filteredSongs.length} ТРЕКІВ</span>
+      </div>
+
+      <div className="album-tabs-container">
+        {ALBUM_TABS.map((tab) => {
+          const isActive = tab.id === activeAlbum;
+          const songCount = tab.id === 'ALL' 
+            ? songs.length 
+            : songs.filter(s => s.album === tab.id).length;
+
+          return (
+            <button
+              key={tab.id}
+              className={`album-tab ${isActive ? 'active' : ''}`}
+              onClick={() => {
+                triggerTactileFeedback('button_press');
+                setActiveAlbum(tab.id);
+              }}
+            >
+              <span className="tab-label">{tab.label}</span>
+              <span className="tab-count">({songCount})</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="song-list-scroll" ref={scrollContainerRef}>
-        {songs.length === 0 ? (
+        {filteredSongs.length === 0 ? (
           <div 
             style={{ 
               padding: '40px 20px', 
@@ -288,10 +375,12 @@ export default function SongList({ songs, currentSongId, onSelectSong, onDeleteS
               fontStyle: 'italic'
             }}
           >
-            Черга порожня. Завантажте пісні з комп'ютера!
+            {activeAlbum === 'ALL' 
+              ? "Черга порожня. Завантажте пісні з комп'ютера!"
+              : "В цьому альбомі немає пісень. Додайте їх за допомогою 🏷️!"}
           </div>
         ) : (
-          songs.map((song, index) => {
+          filteredSongs.map((song, index) => {
             const isActive = song.id === currentSongId;
             const isDragging = index === draggedIndex;
             const isOver = index === dragOverIndex;
@@ -388,7 +477,7 @@ export default function SongList({ songs, currentSongId, onSelectSong, onDeleteS
                     ? 'box-shadow 0.15s, border-color 0.15s, opacity 0.15s'
                     : 'transform 0.28s cubic-bezier(0.175, 0.885, 0.32, 1.275), background 0.22s, border-color 0.22s, box-shadow 0.22s, opacity 0.22s',
                     
-                  overflow: 'hidden',
+                  overflow: activeDropdownSongId === song.id ? 'visible' : 'hidden',
                   paddingLeft: '16px'
                 }}
               >
@@ -460,13 +549,54 @@ export default function SongList({ songs, currentSongId, onSelectSong, onDeleteS
                     </button>
                     <button 
                       className="song-action-btn"
-                      disabled={index === songs.length - 1}
+                      disabled={index === filteredSongs.length - 1}
                       onClick={() => moveSong(index, 1)}
-                      style={{ opacity: index === songs.length - 1 ? 0.3 : 1 }}
+                      style={{ opacity: index === filteredSongs.length - 1 ? 0.3 : 1 }}
                       title="Вниз"
                     >
                       ▼
                     </button>
+
+                    {/* Tag / Album Button */}
+                    <button
+                      className={`song-action-btn tag-btn ${song.album ? 'has-album' : ''}`}
+                      onClick={(e) => {
+                        triggerTactileFeedback('button_press');
+                        setActiveDropdownSongId(activeDropdownSongId === song.id ? null : song.id);
+                      }}
+                      title="Призначити альбом"
+                    >
+                      🏷️
+                    </button>
+
+                    {activeDropdownSongId === song.id && (
+                      <div className={`album-dropdown ${index >= filteredSongs.length - 2 && filteredSongs.length > 2 ? 'dropdown-up' : ''}`}>
+                        <div className="album-dropdown-header">Оберіть альбом</div>
+                        {ALLOWED_ALBUMS.map((albumName) => (
+                          <div 
+                            key={albumName} 
+                            className={`album-dropdown-item ${song.album === albumName ? 'selected' : ''}`}
+                            onClick={() => {
+                              triggerTactileFeedback('button_press');
+                              onUpdateSongAlbum(song.id, albumName);
+                              setActiveDropdownSongId(null);
+                            }}
+                          >
+                            {albumName}
+                          </div>
+                        ))}
+                        <div 
+                          className="album-dropdown-item clear-item"
+                          onClick={() => {
+                            triggerTactileFeedback('button_press');
+                            onUpdateSongAlbum(song.id, null);
+                            setActiveDropdownSongId(null);
+                          }}
+                        >
+                          ❌ Видалити з альбому
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Delete Button */}
                     <button 

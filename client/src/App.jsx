@@ -12,6 +12,7 @@ export default function App() {
   const [songs, setSongs] = useState([]);
   const [currentSongIndex, setCurrentSongIndex] = useState(-1);
   const [showStartScreen, setShowStartScreen] = useState(true);
+  const [activeAlbum, setActiveAlbum] = useState('ALL');
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.8);
   const [crossfadeDuration, setCrossfadeDuration] = useState(5); // default 5 seconds
@@ -599,6 +600,23 @@ export default function App() {
     }
   };
 
+  // Song Album Update
+  const handleUpdateSongAlbum = async (id, album) => {
+    try {
+      const response = await fetch(`/api/playlist/${id}/album`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ album }),
+      });
+      if (response.ok) {
+        showToast("Альбом оновлено!");
+        await fetchPlaylist(); // Refetch updated database
+      }
+    } catch (error) {
+      console.error('Failed to update song album:', error);
+    }
+  };
+
   // Audio Seeking (Timeline Scrubber)
   const handleSeek = (time) => {
     const activeAudio = activePlayer === 'A' ? audioARef.current : audioBRef.current;
@@ -649,6 +667,7 @@ export default function App() {
           onUploadSuccess={handleUploadSuccess}
           showToast={showToast}
           songs={songs} 
+          activeAlbum={activeAlbum}
         />
 
         {/* Main Dashboard Control Unit */}
@@ -681,6 +700,9 @@ export default function App() {
           onSelectSong={handleSelectSong}
           onDeleteSong={handleDeleteSong}
           onReorderSongs={handleReorderSongs}
+          activeAlbum={activeAlbum}
+          setActiveAlbum={setActiveAlbum}
+          onUpdateSongAlbum={handleUpdateSongAlbum}
         />
       </div>
 

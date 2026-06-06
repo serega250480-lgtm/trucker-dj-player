@@ -1792,3 +1792,151 @@ body {
   background: rgba(0, 255, 102, 0.12);
 }
 
+/* ==========================================================================
+   ALBUM BOOKMARKS & ASSIGNMENT STYLES
+   ========================================================================== */
+.album-tabs-container {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #110d0a; /* Deep dark wood/leatherette tray look */
+  border-bottom: 1px solid #2d221a;
+  overflow-x: auto;
+  scrollbar-width: none; /* Hide scrollbar for cleaner look */
+  -ms-overflow-style: none;
+  position: relative;
+  z-index: 2;
+}
+
+.album-tabs-container::-webkit-scrollbar {
+  display: none;
+}
+
+.album-tab {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  background: #0d0f11; /* Sleek black plastic tape appearance */
+  border: 1px solid #232a30;
+  border-radius: 4px;
+  color: #7d8b94;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.album-tab:hover {
+  color: #ffffff;
+  border-color: #3b4550;
+  background: #12161a;
+}
+
+.album-tab.active {
+  color: #ffffff;
+  background: #07090b;
+  border-color: var(--color-amber);
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.9),
+    0 0 8px rgba(255, 153, 0, 0.45), /* Amber backlit neon glow */
+    0 0 15px rgba(255, 153, 0, 0.2);
+  text-shadow: 0 0 4px rgba(255, 210, 148, 0.6);
+}
+
+.album-tab .tab-count {
+  font-size: 8px;
+  opacity: 0.65;
+}
+
+/* Album assignment dropdown */
+.album-dropdown {
+  position: absolute;
+  top: 42px;
+  right: 12px;
+  width: 200px;
+  background: #1a120c; /* Deep mahogany wood panel */
+  background-image: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.25) 100%);
+  border: 2px solid #544031; /* Metallic bronze/gold frame look */
+  border-radius: 6px;
+  box-shadow: 
+    0 10px 25px rgba(0, 0, 0, 0.9),
+    inset 0 1px 2px rgba(255, 255, 255, 0.1),
+    0 0 12px rgba(0, 0, 0, 0.75);
+  padding: 6px 0;
+  z-index: 100;
+  font-family: var(--font-sans);
+  text-align: left;
+}
+
+.album-dropdown.dropdown-up {
+  top: auto;
+  bottom: 42px;
+}
+
+.album-dropdown-header {
+  font-size: 8px;
+  color: #8f796a;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 4px 12px 6px 12px;
+  border-bottom: 1px solid #312117;
+  margin-bottom: 4px;
+}
+
+.album-dropdown-item {
+  padding: 8px 12px;
+  font-size: 10px;
+  color: #ffd294; /* Soft warm glow text */
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 600;
+}
+
+.album-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+  padding-left: 15px; /* Slider hover effect */
+}
+
+.album-dropdown-item.selected {
+  color: var(--color-amber);
+  text-shadow: var(--color-amber-glow);
+  background: rgba(255, 153, 0, 0.08);
+}
+
+.album-dropdown-item.clear-item {
+  color: #ff5555;
+  border-top: 1px solid #312117;
+  margin-top: 4px;
+  font-size: 9px;
+}
+
+.album-dropdown-item.clear-item:hover {
+  background: rgba(255, 85, 85, 0.1);
+  color: #ff6e6e;
+}
+
+/* Tag/Label button */
+.song-action-btn.tag-btn {
+  color: #92753a;
+  transition: all 0.2s ease;
+}
+
+.song-action-btn.tag-btn:hover {
+  color: var(--color-amber);
+  text-shadow: var(--color-amber-glow);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.song-action-btn.tag-btn.has-album {
+  color: var(--color-amber);
+  text-shadow: var(--color-amber-glow);
+}
+

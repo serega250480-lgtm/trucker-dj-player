@@ -7,7 +7,8 @@ export default function Visualizer({
   onShareClick, 
   onUploadSuccess,
   showToast,
-  songs = [] 
+  songs = [],
+  activeAlbum
 }) {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
@@ -981,6 +982,9 @@ export default function Visualizer({
     audioFiles.forEach(file => {
       formData.append('audio', file);
     });
+    if (activeAlbum && activeAlbum !== 'ALL') {
+      formData.append('album', activeAlbum);
+    }
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/playlist/upload');
