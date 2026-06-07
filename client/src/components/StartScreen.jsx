@@ -1,9 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { triggerTactileFeedback } from '../utils/tactile';
 import startScreenImg from '../assets/start_screen.png';
 
 export default function StartScreen({ onStart, audioContextRef }) {
   const [ignitionState, setIgnitionState] = useState('idle'); // idle | cranking | fired | fading
+  const [cacheProgress, setCacheProgress] = useState(0);
+  const [isCaching, setIsCaching] = useState(false);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    // Check if there is an active/installing registration right now
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (reg) {
+        if (reg.installing) {
+          setIsCaching(true);
+        } else if (reg.waiting || reg.active) {
+          setIsCaching(false);
+        }
+      }
+    });
+
+    const handleMessage = (event) => {
+      if (event.data && event.data.type === 'PWA_CACHE_PROGRESS') {
+        setIsCaching(true);
+        setCacheProgress(event.data.percentage);
+        
+        if (event.data.percentage >= 100) {
+          setTimeout(() => {
+            setIsCaching(false);
+          }, 800);
+        }
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleMessage);
+    };
+  }, []);
 
   const handleIgnitionClick = (e) => {
     e.stopPropagation(); // Prevent duplicate triggers
@@ -162,7 +197,7 @@ export default function StartScreen({ onStart, audioContextRef }) {
         <div className="ignition-glow-effect" />
 
         {/* Circular Clickable Hotspot covering the START/STOP button */}
-        {ignitionState === 'idle' && (
+        {ignitionState === 'idle' && !isCaching && (
           <div 
             className="start-button-hotspot" 
             onClick={handleIgnitionClick} 
@@ -173,10 +208,29 @@ export default function StartScreen({ onStart, audioContextRef }) {
 
       {/* Status Text HUD overlay positioned at the viewport bottom (safe from cropping) */}
       <div className="start-screen-prompt">
-        {ignitionState === 'idle' && '🔑 НАДУШІТЬ КНОПКУ СТАРТ ДЛЯ ЗАПУСКУ'}
-        {ignitionState === 'cranking' && '⌛ ЗАПУСК СТАРТЕРА...'}
-        {ignitionState === 'fired' && '💚 ДВИГУН ЗАВЕДЕНО!'}
-        {ignitionState === 'fading' && '🚚 ВХІД У КАБІНУ...'}
+        {isCaching ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '11px', letterSpacing: '1px' }}>⌛ ЗАВАНТАЖЕННЯ РЕСУРСІВ... {cacheProgress}%</span>
+            <div style={{ width: '140px', height: '4px', background: '#3a2e25', borderRadius: '2px', overflow: 'hidden' }}>
+              <div 
+                style={{ 
+                  width: `${cacheProgress}%`, 
+                  height: '100%', 
+                  background: 'var(--color-amber)', 
+                  boxShadow: 'var(--color-amber-glow)',
+                  transition: 'width 0.1s ease-out' 
+                }} 
+              />
+            </div>
+          </div>
+        ) : (
+          <>
+            {ignitionState === 'idle' && '🔑 НАДУШІТЬ КНОПКУ СТАРТ ДЛЯ ЗАПУСКУ'}
+            {ignitionState === 'cranking' && '⌛ ЗАПУСК СТАРТЕРА...'}
+            {ignitionState === 'fired' && '💚 ДВИГУН ЗАВЕДЕНО!'}
+            {ignitionState === 'fading' && '🚚 ВХІД У КАБІНУ...'}
+          </>
+        )}
       </div>
     </div>
   );

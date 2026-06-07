@@ -8,8 +8,29 @@ const ASSETS = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      let cachedCount = 0;
+      const total = ASSETS.length;
+      
+      for (const asset of ASSETS) {
+        try {
+          await cache.add(asset);
+        } catch (err) {
+          console.warn('Failed to cache asset:', asset, err);
+        } finally {
+          cachedCount++;
+          const percentage = Math.round((cachedCount / total) * 100);
+          
+          // Notify client pages of progress
+          const clientsList = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
+          for (const client of clientsList) {
+            client.postMessage({
+              type: 'PWA_CACHE_PROGRESS',
+              percentage
+            });
+          }
+        }
+      }
     }).then(() => self.skipWaiting())
   );
 });
