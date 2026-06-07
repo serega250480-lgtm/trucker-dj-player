@@ -3,6 +3,7 @@ import { triggerTactileFeedback } from '../utils/tactile';
 
 export default function ShareModal({ onClose, shareDetails }) {
   const [copied, setCopied] = useState(false);
+  const [installTab, setInstallTab] = useState(null);
 
   if (!shareDetails) return null;
 
@@ -130,23 +131,45 @@ export default function ShareModal({ onClose, shareDetails }) {
             </button>
           )}
 
-          {/* Add to Home Screen Instructions */}
-          <div className="a2hs-bezel" style={{ width: '100%', marginTop: '16px', padding: '12px', border: '1.5px solid #4a3e35', borderRadius: '6px', background: 'rgba(0,0,0,0.4)', textAlign: 'left', boxSizing: 'border-box' }}>
-            <div className="cb-toggle-label" style={{ fontSize: '9px', marginBottom: '8px', color: '#ffd294', letterSpacing: '0.5px' }}>
-              📲 ЯК ДОДАТИ НА ГОЛОВНИЙ ЕКРАН:
+          {/* Add to Home Screen Buttons & Instructions */}
+          <div style={{ width: '100%', marginTop: '16px' }}>
+            <label className="cb-toggle-label" style={{ display: 'block', marginBottom: '8px', fontSize: '9px', textAlign: 'left' }}>
+              📲 ВСТАНОВИТИ НА ЕКРАН ТЕЛЕФОНУ:
+            </label>
+            <div className="install-device-btns-row">
+              <button 
+                className={`industrial-btn install-device-btn ${installTab === 'ios' ? 'active-amber' : ''}`}
+                onClick={() => {
+                  triggerTactileFeedback('button_press');
+                  setInstallTab(installTab === 'ios' ? null : 'ios');
+                }}
+              >
+                🍎 APPLE iOS
+              </button>
+              <button 
+                className={`industrial-btn install-device-btn ${installTab === 'android' ? 'active-amber' : ''}`}
+                onClick={() => {
+                  triggerTactileFeedback('button_press');
+                  setInstallTab(installTab === 'android' ? null : 'android');
+                }}
+              >
+                🤖 ANDROID
+              </button>
             </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '10px', color: '#8c9ba5', lineHeight: '1.4' }}>
-              <div style={{ borderBottom: '1px solid rgba(255,210,148,0.08)', paddingBottom: '6px' }}>
-                <strong style={{ color: '#ffffff', display: 'block', marginBottom: '2px' }}>Apple iOS (Safari):</strong>
+
+            {installTab === 'ios' && (
+              <div className="a2hs-bezel" style={{ marginTop: '10px', padding: '12px', border: '1.5px solid #4a3e35', borderRadius: '6px', background: 'rgba(0,0,0,0.5)', textAlign: 'left', fontSize: '10px', color: '#8c9ba5', lineHeight: '1.4', boxSizing: 'border-box' }}>
+                <strong style={{ color: '#ffffff', display: 'block', marginBottom: '4px' }}>Apple iOS (Safari):</strong>
                 Натисніть кнопку <strong>«Поділитися»</strong> (іконка <span style={{ fontSize: '12px' }}>📤</span> внизу екрана) ➔ виберіть <strong>«Додати на початковий екран»</strong> (<span style={{ fontSize: '11px' }}>➕</span>).
               </div>
+            )}
 
-              <div>
-                <strong style={{ color: '#ffffff', display: 'block', marginBottom: '2px' }}>Android (Chrome/Opera):</strong>
-                Натисніть <strong>«Три крапки»</strong> (<span style={{ fontSize: '12px' }}>⋮</span>) вгорі праворуч ➔ виберіть <strong>«Додати на головний екран»</strong> або <strong>«Встановити»</strong>.
+            {installTab === 'android' && (
+              <div className="a2hs-bezel" style={{ marginTop: '10px', padding: '12px', border: '1.5px solid #4a3e35', borderRadius: '6px', background: 'rgba(0,0,0,0.5)', textAlign: 'left', fontSize: '10px', color: '#8c9ba5', lineHeight: '1.4', boxSizing: 'border-box' }}>
+                <strong style={{ color: '#ffffff', display: 'block', marginBottom: '4px' }}>Android (Chrome/Opera):</strong>
+                Натисніть кнопку <strong>«Три крапки»</strong> (<span style={{ fontSize: '12px' }}>⋮</span>) вгорі праворуч ➔ виберіть <strong>«Додати на головний екран»</strong> або <strong>«Встановити»</strong>.
               </div>
-            </div>
+            )}
           </div>
 
           <button 
