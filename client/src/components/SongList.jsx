@@ -533,7 +533,7 @@ export default function SongList({
                       ? 0.72 
                       : (isLiftedPlate ? 0.98 : 1)),
                       
-                  zIndex: isLiftedPlate ? 50 : 2,
+                  zIndex: isLiftedPlate ? 50 : (activeDropdownSongId === song.id ? 10 : 2),
                   
                   // 3D perspective tilts for mechanical hydraulic lift
                   transform: isLiftedPlate
