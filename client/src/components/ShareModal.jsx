@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { triggerTactileFeedback } from '../utils/tactile';
 
-export default function ShareModal({ onClose, shareDetails }) {
+export default function ShareModal({ onClose, shareDetails, deferredPrompt, setDeferredPrompt }) {
   const [copied, setCopied] = useState(false);
   const [installTab, setInstallTab] = useState(null);
 
@@ -44,6 +44,24 @@ export default function ShareModal({ onClose, shareDetails }) {
       }
     } else {
       handleCopy();
+    }
+  };
+
+  const handleAndroidInstall = async () => {
+    triggerTactileFeedback('button_press');
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`User response to PWA install: ${outcome}`);
+        setDeferredPrompt(null);
+        setInstallTab(null);
+      } catch (err) {
+        console.error('Error triggering PWA prompt:', err);
+        setInstallTab(installTab === 'android' ? null : 'android');
+      }
+    } else {
+      setInstallTab(installTab === 'android' ? null : 'android');
     }
   };
 
@@ -147,13 +165,10 @@ export default function ShareModal({ onClose, shareDetails }) {
                 🍎 APPLE iOS
               </button>
               <button 
-                className={`industrial-btn install-device-btn ${installTab === 'android' ? 'active-amber' : ''}`}
-                onClick={() => {
-                  triggerTactileFeedback('button_press');
-                  setInstallTab(installTab === 'android' ? null : 'android');
-                }}
+                className={`industrial-btn install-device-btn ${deferredPrompt ? 'active-amber' : (installTab === 'android' ? 'active-amber' : '')}`}
+                onClick={handleAndroidInstall}
               >
-                🤖 ANDROID
+                🤖 ANDROID {deferredPrompt ? '(ВСТАНОВИТИ)' : ''}
               </button>
             </div>
 

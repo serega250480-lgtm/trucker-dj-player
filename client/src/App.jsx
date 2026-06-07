@@ -26,6 +26,19 @@ export default function App() {
   const [isShuffle, setIsShuffle] = useState(false);
   const [isFlickerActive, setIsFlickerActive] = useState(true);
   const [playedSongIds, setPlayedSongIds] = useState([]);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      console.log('beforeinstallprompt event fired!');
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
 
   // Dual Audio Elements
   const audioARef = useRef(new Audio());
@@ -711,6 +724,8 @@ export default function App() {
         <ShareModal 
           shareDetails={shareDetails} 
           onClose={() => setIsShareOpen(false)} 
+          deferredPrompt={deferredPrompt}
+          setDeferredPrompt={setDeferredPrompt}
         />
       )}
 

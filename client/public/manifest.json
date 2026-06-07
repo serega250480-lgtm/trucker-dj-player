@@ -1,0 +1,17 @@
+{
+  "short_name": "ROAD DJ",
+  "name": "ROAD DJ Trucker Dashboard Player",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f1011",
+  "theme_color": "#0f1011",
+  "display": "standalone",
+  "orientation": "portrait"
+}
