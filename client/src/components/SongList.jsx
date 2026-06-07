@@ -4,16 +4,14 @@ import { triggerTactileFeedback } from '../utils/tactile';
 const ALLOWED_ALBUMS = [
   'UKRAINIAN VIBE MUSIC, Vol. 1',
   'UKRAINIAN VIBE MUSIC, Vol. 2',
-  'UKRAINIAN VIBE MUSIC, Vol. 3',
-  'UKRAINIAN ROAD MUSIC, Vol. 1'
+  'UKRAINIAN VIBE MUSIC, Vol. 3'
 ];
 
 const ALBUM_TABS = [
   { id: 'ALL', label: 'Усі треки' },
   { id: 'UKRAINIAN VIBE MUSIC, Vol. 1', label: 'VIBE Vol. 1' },
   { id: 'UKRAINIAN VIBE MUSIC, Vol. 2', label: 'VIBE Vol. 2' },
-  { id: 'UKRAINIAN VIBE MUSIC, Vol. 3', label: 'VIBE Vol. 3' },
-  { id: 'UKRAINIAN ROAD MUSIC, Vol. 1', label: 'ROAD Vol. 1' }
+  { id: 'UKRAINIAN VIBE MUSIC, Vol. 3', label: 'VIBE Vol. 3' }
 ];
 
 export default function SongList({ 

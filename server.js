@@ -11,8 +11,7 @@ const { google } = require('googleapis');
 const ALLOWED_ALBUMS = [
   'UKRAINIAN VIBE MUSIC, Vol. 1',
   'UKRAINIAN VIBE MUSIC, Vol. 2',
-  'UKRAINIAN VIBE MUSIC, Vol. 3',
-  'UKRAINIAN ROAD MUSIC, Vol. 1'
+  'UKRAINIAN VIBE MUSIC, Vol. 3'
 ];
 
 const app = express();
