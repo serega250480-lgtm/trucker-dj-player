@@ -324,7 +324,7 @@ app.get('/uploads/:filename', async (req, res) => {
   }
 
   // 2. Otherwise, if Google Drive API is active, stream it from Google Drive
-  if (drive && driveFolderId) {
+  if (drive && driveFolderId && !isLocalGDriveActive) {
     try {
       let fileId = null;
 
@@ -464,7 +464,12 @@ function readDatabase() {
 function writeDatabase(data) {
   try {
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf8');
-    if (drive) {
+    if (isLocalGDriveActive) {
+      const gDriveDbPath = path.join(uploadsDir, 'playlist.json');
+      fs.writeFileSync(gDriveDbPath, JSON.stringify(data, null, 2), 'utf8');
+      console.log('💾 Successfully saved database to local G: drive sync directory.');
+    }
+    if (drive && !isLocalGDriveActive) {
       syncDatabaseToDrive().catch(err => console.error('Error syncing DB in writeDatabase:', err));
     }
   } catch (error) {
@@ -543,10 +548,25 @@ app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => 
         .trim();
 
       // Check for duplicate in database
-      const isDuplicate = playlist.some(s => 
+      const existingSong = playlist.find(s => 
         s.title.toLowerCase() === title.toLowerCase() || 
         s.originalName.toLowerCase() === originalName.toLowerCase()
       );
+
+      let isDuplicate = false;
+      let targetSong = null;
+
+      if (existingSong) {
+        // If the song is in the database, check if the physical file actually exists
+        const localPath = path.join(uploadsDir, existingSong.filename);
+        if (fs.existsSync(localPath)) {
+          isDuplicate = true;
+        } else {
+          // Physical file is missing, we will restore it!
+          console.log(`🔄 Restoring missing physical file for existing track: "${title}" (${originalName})`);
+          targetSong = existingSong;
+        }
+      }
 
       if (isDuplicate) {
         console.log(`⚠️ Skipping duplicate track: "${title}" (${originalName})`);
@@ -618,28 +638,44 @@ app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => 
         }
       }
 
-      currentMaxOrder++;
       let album = req.body.album || null;
       if (album && !ALLOWED_ALBUMS.includes(album)) {
         album = null;
       }
-      const newSong = {
-        id: 'song_' + Date.now() + '_' + Math.round(Math.random() * 1000000),
-        title: title,
-        filename: file.filename,
-        originalName: originalName,
-        size: file.size,
-        artworkUrl: artworkUrl,
-        duration: duration,
-        order: currentMaxOrder,
-        createdAt: new Date().toISOString(),
-        album: album,
-        ...(gdriveFileId && { gdriveFileId }),
-        ...(gdriveArtworkFileId && { gdriveArtworkFileId })
-      };
 
-      playlist.push(newSong);
-      addedSongs.push(newSong);
+      if (targetSong) {
+        // Update existing song
+        targetSong.filename = file.filename;
+        targetSong.size = file.size;
+        if (artworkUrl) targetSong.artworkUrl = artworkUrl;
+        if (duration) targetSong.duration = duration;
+        targetSong.createdAt = new Date().toISOString();
+        if (album) targetSong.album = album;
+        if (gdriveFileId) targetSong.gdriveFileId = gdriveFileId;
+        if (gdriveArtworkFileId) targetSong.gdriveArtworkFileId = gdriveArtworkFileId;
+        
+        addedSongs.push(targetSong);
+        console.log(`✅ Restored "${title}" in database.`);
+      } else {
+        // Create new song
+        currentMaxOrder++;
+        const newSong = {
+          id: 'song_' + Date.now() + '_' + Math.round(Math.random() * 1000000),
+          title: title,
+          filename: file.filename,
+          originalName: originalName,
+          size: file.size,
+          artworkUrl: artworkUrl,
+          duration: duration,
+          order: currentMaxOrder,
+          createdAt: new Date().toISOString(),
+          album: album,
+          ...(gdriveFileId && { gdriveFileId }),
+          ...(gdriveArtworkFileId && { gdriveArtworkFileId })
+        };
+        playlist.push(newSong);
+        addedSongs.push(newSong);
+      }
     }
 
     if (addedSongs.length === 0 && req.files && req.files.length > 0) {
