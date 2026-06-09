@@ -78,6 +78,25 @@ export default function SongList({
     };
   }, []);
 
+  // Auto-scroll active song to the top of the queue
+  React.useEffect(() => {
+    if (!currentSongId || !scrollContainerRef.current) return;
+    
+    const timer = setTimeout(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const activeCard = container.querySelector(`.song-item.active`);
+      if (activeCard) {
+        container.scrollTo({
+          top: activeCard.offsetTop - 10,
+          behavior: 'smooth'
+        });
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [currentSongId, activeAlbum, songs]);
+
   // Tabs drag-to-scroll & wheel-to-scroll listeners
   React.useEffect(() => {
     const container = tabsContainerRef.current;

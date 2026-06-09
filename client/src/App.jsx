@@ -27,6 +27,7 @@ export default function App() {
   const [isFlickerActive, setIsFlickerActive] = useState(true);
   const [playedSongIds, setPlayedSongIds] = useState([]);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [playbackAlbum, setPlaybackAlbum] = useState('ALL');
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
@@ -287,7 +288,7 @@ export default function App() {
       audioB.removeEventListener('timeupdate', handleTimeUpdate);
       audioB.removeEventListener('ended', handleEnded);
     };
-  }, [activePlayer, songs, crossfadeDuration, currentSongIndex]);
+  }, [activePlayer, songs, crossfadeDuration, currentSongIndex, playbackAlbum]);
 
   // Unlock audio elements safely (using base64 silent WAV to prevent browser lockups)
   const unlockAudio = () => {
@@ -372,6 +373,12 @@ export default function App() {
     }
   };
 
+  const handleSelectSongFromList = (song) => {
+    // Record that the user started playback from the currently active UI album tab
+    setPlaybackAlbum(activeAlbum);
+    handleSelectSong(song);
+  };
+
   // Play / Pause Toggle
   const handlePlayPause = () => {
     unlockAudio();
@@ -391,9 +398,20 @@ export default function App() {
       const hasValidSrc = activeAudio.src && activeAudio.src.includes('/uploads/');
       if (!hasValidSrc && currentSongIndex !== -1 && songs[currentSongIndex]) {
         activeAudio.src = `/uploads/${songs[currentSongIndex].filename}`;
+        setPlaybackAlbum(activeAlbum);
       } else if (!hasValidSrc && songs.length > 0) {
-        setCurrentSongIndex(0);
-        activeAudio.src = `/uploads/${songs[0].filename}`;
+        const pSongs = activeAlbum === 'ALL' ? songs : songs.filter(s => s.album === activeAlbum);
+        if (pSongs.length > 0) {
+          const firstSong = pSongs[0];
+          const globalIdx = songs.findIndex(s => s.id === firstSong.id);
+          setCurrentSongIndex(globalIdx !== -1 ? globalIdx : 0);
+          activeAudio.src = `/uploads/${firstSong.filename}`;
+          setPlaybackAlbum(activeAlbum);
+        } else {
+          setCurrentSongIndex(0);
+          activeAudio.src = `/uploads/${songs[0].filename}`;
+          setPlaybackAlbum('ALL');
+        }
       }
       
       activeAudio.volume = activePlayer === 'A' ? volume : 0;
@@ -410,77 +428,104 @@ export default function App() {
     }
   };
 
-  // Get next random song index using a non-repeating shuffle pool
-  const getNextShuffleIndex = (currentIndex) => {
-    if (songs.length === 0) return -1;
-    if (songs.length === 1) return 0;
+  // Get next random song using a non-repeating shuffle pool restricted to playbackSongs
+  const getNextShuffleSong = (currentSong) => {
+    const pSongs = playbackAlbum === 'ALL' ? songs : songs.filter(s => s.album === playbackAlbum);
+    if (pSongs.length === 0) return null;
+    if (pSongs.length === 1) return pSongs[0];
 
     // Filter songs that haven't been played in this cycle yet
-    // Exclude the current song to avoid playing it twice consecutively
-    let unplayed = songs.filter(s => !playedSongIds.includes(s.id) && s.id !== (songs[currentIndex]?.id));
+    let unplayed = pSongs.filter(s => !playedSongIds.includes(s.id) && s.id !== currentSong?.id);
 
-    // If all songs have been played, reset the pool!
+    // If all songs have been played, reset the pool for this album!
     if (unplayed.length === 0) {
+      const currentId = currentSong?.id;
       // Reset pool, keeping only the currently playing song's ID to avoid repeating it immediately
-      const currentId = songs[currentIndex]?.id;
-      const newPlayed = currentId ? [currentId] : [];
-      setPlayedSongIds(newPlayed);
-      
-      // The new unplayed pool will be all other songs
-      unplayed = songs.filter(s => s.id !== currentId);
+      setPlayedSongIds(currentId ? [currentId] : []);
+      unplayed = pSongs.filter(s => s.id !== currentId);
     }
 
-    if (unplayed.length === 0) return 0;
+    if (unplayed.length === 0) return pSongs[0];
 
     // Pick a random song from the unplayed pool
     const randomSong = unplayed[Math.floor(Math.random() * unplayed.length)];
-    const nextIndex = songs.findIndex(s => s.id === randomSong.id);
-
+    
     // Record this song as played
-    setPlayedSongIds(prev => [...prev, randomSong.id]);
+    setPlayedSongIds(prev => {
+      if (!prev.includes(randomSong.id)) {
+        return [...prev, randomSong.id];
+      }
+      return prev;
+    });
 
-    return nextIndex !== -1 ? nextIndex : 0;
+    return randomSong;
   };
 
   // Play Next Song (Simple skip)
   const playNextSong = () => {
-    if (songs.length === 0) return;
-    let nextIndex;
+    const pSongs = playbackAlbum === 'ALL' ? songs : songs.filter(s => s.album === playbackAlbum);
+    if (pSongs.length === 0) return;
+
+    const currentSong = songs[currentSongIndex];
+    let nextSong;
+
     if (isShuffle) {
-      nextIndex = getNextShuffleIndex(currentSongIndex);
+      nextSong = getNextShuffleSong(currentSong);
     } else {
-      nextIndex = currentSongIndex + 1;
-      if (nextIndex >= songs.length) {
+      const playbackIndex = pSongs.findIndex(s => s.id === currentSong?.id);
+      let nextIndex = playbackIndex + 1;
+      if (nextIndex >= pSongs.length || playbackIndex === -1) {
         nextIndex = 0; // loop back to first
       }
+      nextSong = pSongs[nextIndex];
     }
-    handleSelectSong(songs[nextIndex]);
+
+    if (nextSong) {
+      handleSelectSong(nextSong);
+    }
   };
 
   // Play Previous Song
   const playPrevSong = () => {
-    if (songs.length === 0) return;
-    let prevIndex;
+    const pSongs = playbackAlbum === 'ALL' ? songs : songs.filter(s => s.album === playbackAlbum);
+    if (pSongs.length === 0) return;
+
+    const currentSong = songs[currentSongIndex];
+    let prevSong;
+
     if (isShuffle) {
-      prevIndex = getNextShuffleIndex(currentSongIndex);
+      prevSong = getNextShuffleSong(currentSong);
     } else {
-      prevIndex = currentSongIndex - 1;
-      if (prevIndex < 0) {
-        prevIndex = songs.length - 1; // loop to last
+      const playbackIndex = pSongs.findIndex(s => s.id === currentSong?.id);
+      let prevIndex = playbackIndex - 1;
+      if (prevIndex < 0 || playbackIndex === -1) {
+        prevIndex = pSongs.length - 1; // loop to last
       }
+      prevSong = pSongs[prevIndex];
     }
-    handleSelectSong(songs[prevIndex]);
+
+    if (prevSong) {
+      handleSelectSong(prevSong);
+    }
   };
 
   // DJ Transition Engine (Crossfading A & B players)
   const triggerDJCrossfade = () => {
-    let nextSongIndex;
+    const pSongs = playbackAlbum === 'ALL' ? songs : songs.filter(s => s.album === playbackAlbum);
+    if (pSongs.length === 0) return;
+
+    const currentSong = songs[currentSongIndex];
+    let nextSong;
+
     if (isShuffle) {
-      nextSongIndex = getNextShuffleIndex(currentSongIndex);
+      nextSong = getNextShuffleSong(currentSong);
     } else {
-      nextSongIndex = (currentSongIndex + 1) % songs.length;
+      const playbackIndex = pSongs.findIndex(s => s.id === currentSong?.id);
+      let nextIndex = (playbackIndex + 1) % pSongs.length;
+      if (playbackIndex === -1) nextIndex = 0;
+      nextSong = pSongs[nextIndex];
     }
-    const nextSong = songs[nextSongIndex];
+
     if (!nextSong) return;
 
     isTransitioningRef.current = true;
@@ -522,16 +567,17 @@ export default function App() {
             outgoingAudio.currentTime = 0;
             incomingAudio.volume = volume;
 
-            setCurrentSongIndex(nextSongIndex);
+            const nextSongGlobalIndex = songs.findIndex(s => s.id === nextSong.id);
+            setCurrentSongIndex(nextSongGlobalIndex !== -1 ? nextSongGlobalIndex : 0);
             setActivePlayer(activePlayer === 'A' ? 'B' : 'A');
             isTransitioningRef.current = false;
           }
         }, stepTime);
       })
       .catch(err => {
-        console.error('Crossfade failed, skipped:', err);
-        // Fallback to normal skip if player is blocked
+        console.error("DJ crossfade audio play failed:", err);
         isTransitioningRef.current = false;
+        // Fallback to normal skip if player is blocked
         playNextSong();
       });
   };
@@ -710,7 +756,7 @@ export default function App() {
         <SongList
           songs={songs}
           currentSongId={currentSong ? currentSong.id : null}
-          onSelectSong={handleSelectSong}
+          onSelectSong={handleSelectSongFromList}
           onDeleteSong={handleDeleteSong}
           onReorderSongs={handleReorderSongs}
           activeAlbum={activeAlbum}
