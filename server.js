@@ -702,35 +702,58 @@ app.post('/api/playlist/upload', adminOnly, upload.array('audio', 50), async (re
         .replace(/[_-]/g, ' ')
         .trim();
 
+      let album = req.body.album || null;
+      if (album) {
+        const albumsList = readAlbumsDatabase();
+        const validAlbumIds = albumsList.map(a => a.id);
+        if (!validAlbumIds.includes(album)) {
+          album = null;
+        }
+      }
+
       // Check for duplicate in database
       const existingSong = playlist.find(s => 
         s.title.toLowerCase() === title.toLowerCase() || 
         s.originalName.toLowerCase() === originalName.toLowerCase()
       );
 
-      let isDuplicate = false;
       let targetSong = null;
 
       if (existingSong) {
-        // If the song is in the database, check if the physical file actually exists
+        // Automatically update album assignment if it differs
+        let albumChanged = false;
+        if (existingSong.album !== album) {
+          existingSong.album = album;
+          albumChanged = true;
+          console.log(`🏷️ Album for existing track "${title}" automatically updated to: ${album}`);
+        }
+
+        // Check if the physical file actually exists
         const localPath = path.join(uploadsDir, existingSong.filename);
-        if (fs.existsSync(localPath)) {
-          isDuplicate = true;
+        let physicalFileExists = fs.existsSync(localPath);
+        
+        // Also check if we are in cloud mode and have gdrive ID
+        if (!physicalFileExists && drive && !isLocalGDriveActive && existingSong.gdriveFileId) {
+          physicalFileExists = true;
+        }
+
+        if (physicalFileExists) {
+          // File is present, we only updated the album (if changed)
+          if (albumChanged) {
+            addedSongs.push(existingSong); // Include in response to notify client of change
+          }
+          console.log(`⚠️ Skipping duplicate audio file upload for: "${title}" (already exists)`);
+          fs.unlink(file.path, (err) => {
+            if (err && err.code !== 'ENOENT') {
+              console.error(`Error unlinking temp duplicate file ${file.path}:`, err);
+            }
+          });
+          continue;
         } else {
           // Physical file is missing, we will restore it!
           console.log(`🔄 Restoring missing physical file for existing track: "${title}" (${originalName})`);
           targetSong = existingSong;
         }
-      }
-
-      if (isDuplicate) {
-        console.log(`⚠️ Skipping duplicate track: "${title}" (${originalName})`);
-        fs.unlink(file.path, (err) => {
-          if (err && err.code !== 'ENOENT') {
-            console.error(`Error unlinking temp duplicate file ${file.path}:`, err);
-          }
-        });
-        continue;
       }
 
       // Extract embedded album artwork if available
@@ -790,15 +813,6 @@ app.post('/api/playlist/upload', adminOnly, upload.array('audio', 50), async (re
           }
         } catch (uploadErr) {
           console.error(`❌ Google Drive API upload failed for ${file.originalname}:`, uploadErr);
-        }
-      }
-
-      let album = req.body.album || null;
-      if (album) {
-        const albumsList = readAlbumsDatabase();
-        const validAlbumIds = albumsList.map(a => a.id);
-        if (!validAlbumIds.includes(album)) {
-          album = null;
         }
       }
 
