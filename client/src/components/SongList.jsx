@@ -1,21 +1,6 @@
 import React from 'react';
 import { triggerTactileFeedback } from '../utils/tactile';
 
-const ALLOWED_ALBUMS = [
-  'UKRAINIAN VIBE MUSIC, Vol. 1',
-  'UKRAINIAN VIBE MUSIC, Vol. 2',
-  'UKRAINIAN VIBE MUSIC, Vol. 3',
-  'ROAD VOL.1'
-];
-
-const ALBUM_TABS = [
-  { id: 'ALL', label: 'Усі треки' },
-  { id: 'UKRAINIAN VIBE MUSIC, Vol. 1', label: 'VIBE Vol. 1' },
-  { id: 'UKRAINIAN VIBE MUSIC, Vol. 2', label: 'VIBE Vol. 2' },
-  { id: 'UKRAINIAN VIBE MUSIC, Vol. 3', label: 'VIBE Vol. 3' },
-  { id: 'ROAD VOL.1', label: 'ROAD Vol. 1' }
-];
-
 export default function SongList({ 
   songs, 
   currentSongId, 
@@ -24,7 +9,10 @@ export default function SongList({
   onReorderSongs,
   activeAlbum,
   setActiveAlbum,
-  onUpdateSongAlbum
+  onUpdateSongAlbum,
+  isAdmin = false,
+  albums = [],
+  onOpenAlbumModal
 }) {
   const [draggedIndex, setDraggedIndex] = React.useState(null);
   const [dragOverIndex, setDragOverIndex] = React.useState(null);
@@ -45,6 +33,11 @@ export default function SongList({
   const startScrollTop = React.useRef(0);
   const lastClientY = React.useRef(0);
   const scrollLoopId = React.useRef(null);
+
+  const albumTabs = [
+    { id: 'ALL', label: 'Усі треки' },
+    ...albums.map(a => ({ id: a.id, label: a.name }))
+  ];
 
   const filteredSongs = activeAlbum === 'ALL' 
     ? songs 
@@ -344,6 +337,7 @@ export default function SongList({
   }, [onReorderSongs, startScrollLoop]);
 
   const handlePressStart = (e, index, isTouch) => {
+    if (!isAdmin) return; // Only admins can reorder tracks
     if (e.target.closest('.song-controls') || e.target.closest('button')) {
       return;
     }
@@ -424,7 +418,28 @@ export default function SongList({
           zIndex: 2
         }}
       >
-        <span>ЧЕРГА ВІДТВОРЕННЯ</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>ЧЕРГА ВІДТВОРЕННЯ</span>
+          {isAdmin && (
+            <button
+              className="industrial-btn"
+              onClick={() => {
+                triggerTactileFeedback('button_press');
+                onOpenAlbumModal();
+              }}
+              style={{
+                padding: '2px 6px',
+                fontSize: '9px',
+                lineHeight: '1',
+                height: '18px',
+                borderRadius: '4px'
+              }}
+              title="Керування альбомами (Створення, перейменування, сортування)"
+            >
+              ✏️ АЛЬБОМИ
+            </button>
+          )}
+        </div>
         <span style={{ fontSize: '9px', color: 'var(--color-amber)' }}>{filteredSongs.length} ТРЕКІВ</span>
       </div>
 
@@ -434,7 +449,7 @@ export default function SongList({
         onMouseDown={handleTabsMouseDown}
         style={{ cursor: 'grab' }}
       >
-        {ALBUM_TABS.map((tab) => {
+        {albumTabs.map((tab) => {
           const isActive = tab.id === activeAlbum;
           const songCount = tab.id === 'ALL' 
             ? songs.length 
@@ -625,80 +640,82 @@ export default function SongList({
                     </div>
                   </div>
 
-                  <div className="song-controls" onClick={(e) => e.stopPropagation()} style={{ zIndex: 2 }}>
-                    {/* Reordering Buttons */}
-                    <button 
-                      className="song-action-btn"
-                      disabled={index === 0}
-                      onClick={() => moveSong(index, -1)}
-                      style={{ opacity: index === 0 ? 0.3 : 1 }}
-                      title="Вгору"
-                    >
-                      ▲
-                    </button>
-                    <button 
-                      className="song-action-btn"
-                      disabled={index === filteredSongs.length - 1}
-                      onClick={() => moveSong(index, 1)}
-                      style={{ opacity: index === filteredSongs.length - 1 ? 0.3 : 1 }}
-                      title="Вниз"
-                    >
-                      ▼
-                    </button>
+                  {isAdmin && (
+                    <div className="song-controls" onClick={(e) => e.stopPropagation()} style={{ zIndex: 2 }}>
+                      {/* Reordering Buttons */}
+                      <button 
+                        className="song-action-btn"
+                        disabled={index === 0}
+                        onClick={() => moveSong(index, -1)}
+                        style={{ opacity: index === 0 ? 0.3 : 1 }}
+                        title="Вгору"
+                      >
+                        ▲
+                      </button>
+                      <button 
+                        className="song-action-btn"
+                        disabled={index === filteredSongs.length - 1}
+                        onClick={() => moveSong(index, 1)}
+                        style={{ opacity: index === filteredSongs.length - 1 ? 0.3 : 1 }}
+                        title="Вниз"
+                      >
+                        ▼
+                      </button>
 
-                    {/* Tag / Album Button */}
-                    <button
-                      className={`song-action-btn tag-btn ${song.album ? 'has-album' : ''}`}
-                      onClick={(e) => {
-                        triggerTactileFeedback('button_press');
-                        setActiveDropdownSongId(activeDropdownSongId === song.id ? null : song.id);
-                      }}
-                      title="Призначити альбом"
-                    >
-                      🏷️
-                    </button>
+                      {/* Tag / Album Button */}
+                      <button
+                        className={`song-action-btn tag-btn ${song.album ? 'has-album' : ''}`}
+                        onClick={(e) => {
+                          triggerTactileFeedback('button_press');
+                          setActiveDropdownSongId(activeDropdownSongId === song.id ? null : song.id);
+                        }}
+                        title="Призначити альбом"
+                      >
+                        🏷️
+                      </button>
 
-                    {activeDropdownSongId === song.id && (
-                      <div className={`album-dropdown ${index >= filteredSongs.length - 2 && filteredSongs.length > 2 ? 'dropdown-up' : ''}`}>
-                        <div className="album-dropdown-header">Оберіть альбом</div>
-                        {ALLOWED_ALBUMS.map((albumName) => (
+                      {activeDropdownSongId === song.id && (
+                        <div className={`album-dropdown ${index >= filteredSongs.length - 2 && filteredSongs.length > 2 ? 'dropdown-up' : ''}`}>
+                          <div className="album-dropdown-header">Оберіть альбом</div>
+                          {albums.map((album) => (
+                            <div 
+                              key={album.id} 
+                              className={`album-dropdown-item ${song.album === album.id ? 'selected' : ''}`}
+                              onClick={() => {
+                                triggerTactileFeedback('button_press');
+                                onUpdateSongAlbum(song.id, album.id);
+                                setActiveDropdownSongId(null);
+                              }}
+                            >
+                              {album.name}
+                            </div>
+                          ))}
                           <div 
-                            key={albumName} 
-                            className={`album-dropdown-item ${song.album === albumName ? 'selected' : ''}`}
+                            className="album-dropdown-item clear-item"
                             onClick={() => {
                               triggerTactileFeedback('button_press');
-                              onUpdateSongAlbum(song.id, albumName);
+                              onUpdateSongAlbum(song.id, null);
                               setActiveDropdownSongId(null);
                             }}
                           >
-                            {albumName}
+                            ❌ Видалити з альбому
                           </div>
-                        ))}
-                        <div 
-                          className="album-dropdown-item clear-item"
-                          onClick={() => {
-                            triggerTactileFeedback('button_press');
-                            onUpdateSongAlbum(song.id, null);
-                            setActiveDropdownSongId(null);
-                          }}
-                        >
-                          ❌ Видалити з альбому
                         </div>
-                      </div>
-                    )}
-                    
-                    {/* Delete Button */}
-                    <button 
-                      className="song-action-btn delete"
-                      onClick={(e) => {
-                        triggerTactileFeedback('button_press');
-                        onDeleteSong(song.id);
-                      }}
-                      title="Видалити"
-                    >
-                      🗑️
-                    </button>
-                  </div>
+                      )}
+                      
+                      {/* Delete Button */}
+                      <button 
+                        className="song-action-btn delete"
+                        onClick={(e) => {
+                          triggerTactileFeedback('button_press');
+                          onDeleteSong(song.id);
+                        }}
+                        title="Видалити"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );

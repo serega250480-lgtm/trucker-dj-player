@@ -8,7 +8,8 @@ export default function Visualizer({
   onUploadSuccess,
   showToast,
   songs = [],
-  activeAlbum
+  activeAlbum,
+  isAdmin = false
 }) {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
@@ -988,6 +989,7 @@ export default function Visualizer({
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/playlist/upload');
+    xhr.setRequestHeader('X-Admin', isAdmin ? 'true' : 'false');
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
@@ -1044,19 +1046,21 @@ export default function Visualizer({
       />
 
       {/* Add Songs button in top-left corner */}
-      <button 
-        className="share-vu-btn"
-        onClick={onUploadButtonClick}
-        disabled={uploading}
-        title="Додати аудіофайли з комп'ютера"
-        style={{
-          position: 'absolute',
-          top: '10px',
-          left: '10px',
-        }}
-      >
-        <span>{uploading ? '⌛' : '📻'}</span> {uploading ? `ЗАВАНТАЖЕННЯ (${uploadProgress})` : 'ДОДАТИ ПІСНЮ'}
-      </button>
+      {isAdmin && (
+        <button 
+          className="share-vu-btn"
+          onClick={onUploadButtonClick}
+          disabled={uploading}
+          title="Додати аудіофайли з комп'ютера"
+          style={{
+            position: 'absolute',
+            top: '10px',
+            left: '10px',
+          }}
+        >
+          <span>{uploading ? '⌛' : '📻'}</span> {uploading ? `ЗАВАНТАЖЕННЯ (${uploadProgress})` : 'ДОДАТИ ПІСНЮ'}
+        </button>
+      )}
 
       {/* Share button in top-right corner */}
       <button 

@@ -8,11 +8,11 @@ const QRCode = require('qrcode');
 const mm = require('music-metadata');
 const { google } = require('googleapis');
 
-const ALLOWED_ALBUMS = [
-  'UKRAINIAN VIBE MUSIC, Vol. 1',
-  'UKRAINIAN VIBE MUSIC, Vol. 2',
-  'UKRAINIAN VIBE MUSIC, Vol. 3',
-  'ROAD VOL.1'
+const DEFAULT_ALBUMS = [
+  { id: 'UKRAINIAN VIBE MUSIC, Vol. 1', name: 'VIBE Vol. 1' },
+  { id: 'UKRAINIAN VIBE MUSIC, Vol. 2', name: 'VIBE Vol. 2' },
+  { id: 'UKRAINIAN VIBE MUSIC, Vol. 3', name: 'VIBE Vol. 3' },
+  { id: 'ROAD VOL.1', name: 'ROAD Vol. 1' }
 ];
 
 const app = express();
@@ -54,6 +54,11 @@ if (!fs.existsSync(dbDir)) {
 const dbPath = path.join(dbDir, 'playlist.json');
 if (!fs.existsSync(dbPath)) {
   fs.writeFileSync(dbPath, JSON.stringify([]));
+}
+
+const albumsPath = path.join(dbDir, 'albums.json');
+if (!fs.existsSync(albumsPath)) {
+  fs.writeFileSync(albumsPath, JSON.stringify(DEFAULT_ALBUMS, null, 2), 'utf8');
 }
 
 // Google Drive API State
@@ -259,6 +264,88 @@ async function syncDatabaseToDrive() {
     }
   } catch (error) {
     console.error('❌ Error syncing database to Google Drive:', error);
+  }
+}
+
+// Sync local albums.json to Google Drive
+async function syncAlbumsToDrive() {
+  if (!drive || !driveFolderId) return;
+  try {
+    console.log('📤 Syncing albums.json database to Google Drive...');
+    const response = await drive.files.list({
+      q: `name = 'albums.json' and '${driveFolderId}' in parents and trashed = false`,
+      fields: 'files(id, name)',
+      spaces: 'drive'
+    });
+    const files = response.data.files;
+    const media = {
+      mimeType: 'application/json',
+      body: fs.createReadStream(albumsPath)
+    };
+
+    if (files && files.length > 0) {
+      const fileId = files[0].id;
+      await drive.files.update({
+        fileId: fileId,
+        media: media
+      });
+      console.log('📤 Updated albums.json on Google Drive.');
+    } else {
+      const fileMetadata = {
+        name: 'albums.json',
+        parents: [driveFolderId]
+      };
+      await drive.files.create({
+        resource: fileMetadata,
+        media: media,
+        fields: 'id'
+      });
+      console.log('📤 Created albums.json on Google Drive.');
+    }
+  } catch (error) {
+    console.error('❌ Error syncing albums database to Google Drive:', error);
+  }
+}
+
+async function checkAndPullAlbumsFromDrive() {
+  if (!drive || !driveFolderId || isLocalGDriveActive) return;
+  try {
+    const response = await drive.files.list({
+      q: `name = 'albums.json' and '${driveFolderId}' in parents and trashed = false`,
+      fields: 'files(id, modifiedTime)',
+      spaces: 'drive'
+    });
+    const files = response.data.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      const driveModifiedTime = new Date(file.modifiedTime).getTime();
+
+      let localModifiedTime = 0;
+      if (fs.existsSync(albumsPath)) {
+        const stats = fs.statSync(albumsPath);
+        localModifiedTime = stats.mtime.getTime();
+      }
+
+      if (driveModifiedTime > localModifiedTime + 2000) {
+        console.log('📥 Found newer albums database on Google Drive. Pulling updates dynamically...');
+        const dest = fs.createWriteStream(albumsPath);
+        const resStream = await drive.files.get(
+          { fileId: file.id, alt: 'media' },
+          { responseType: 'stream' }
+        );
+        
+        await new Promise((resolve, reject) => {
+          resStream.data
+            .on('error', reject)
+            .pipe(dest)
+            .on('error', reject)
+            .on('finish', resolve);
+        });
+        console.log('📥 Successfully pulled updated albums.json from Google Drive.');
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error checking/pulling albums database from Google Drive:', error);
   }
 }
 
@@ -477,6 +564,38 @@ function writeDatabase(data) {
   }
 }
 
+// Helper: Read albums database
+function readAlbumsDatabase() {
+  try {
+    if (!fs.existsSync(albumsPath)) {
+      fs.writeFileSync(albumsPath, JSON.stringify(DEFAULT_ALBUMS, null, 2), 'utf8');
+      return DEFAULT_ALBUMS;
+    }
+    const data = fs.readFileSync(albumsPath, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading albums database:', error);
+    return DEFAULT_ALBUMS;
+  }
+}
+
+// Helper: Write albums database
+function writeAlbumsDatabase(data) {
+  try {
+    fs.writeFileSync(albumsPath, JSON.stringify(data, null, 2), 'utf8');
+    if (isLocalGDriveActive) {
+      const gDriveAlbumsPath = path.join(uploadsDir, 'albums.json');
+      fs.writeFileSync(gDriveAlbumsPath, JSON.stringify(data, null, 2), 'utf8');
+      console.log('💾 Successfully saved albums to local G: drive sync directory.');
+    }
+    if (drive && !isLocalGDriveActive) {
+      syncAlbumsToDrive().catch(err => console.error('Error syncing albums DB to Drive:', err));
+    }
+  } catch (error) {
+    console.error('Error writing albums database:', error);
+  }
+}
+
 // Multer Storage Configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -501,6 +620,23 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ storage, fileFilter });
 
+// Middleware to authorize admin only
+const adminOnly = (req, res, next) => {
+  const ip = req.ip || req.socket.remoteAddress || '';
+  const isAdminIp = 
+    ip.endsWith('127.0.0.1') || 
+    ip === '::1' || 
+    ip === 'localhost';
+  
+  const isAdminHeader = req.headers['x-admin'] === 'true';
+
+  if (isAdminIp || isAdminHeader) {
+    next();
+  } else {
+    res.status(403).json({ error: 'Доступ заборонено: Тільки адміністратор має право редагувати треки' });
+  }
+};
+
 // API Endpoints
 
 // 1. Get playlist
@@ -515,7 +651,7 @@ app.get('/api/playlist', async (req, res) => {
 });
 
 // 2. Upload songs (multiple supported)
-app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => {
+app.post('/api/playlist/upload', adminOnly, upload.array('audio', 50), async (req, res) => {
   try {
     const files = req.files;
     if (!files || files.length === 0) {
@@ -639,8 +775,12 @@ app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => 
       }
 
       let album = req.body.album || null;
-      if (album && !ALLOWED_ALBUMS.includes(album)) {
-        album = null;
+      if (album) {
+        const albumsList = readAlbumsDatabase();
+        const validAlbumIds = albumsList.map(a => a.id);
+        if (!validAlbumIds.includes(album)) {
+          album = null;
+        }
       }
 
       if (targetSong) {
@@ -692,7 +832,7 @@ app.post('/api/playlist/upload', upload.array('audio', 50), async (req, res) => 
 });
 
 // 3. Reorder playlist
-app.post('/api/playlist/reorder', (req, res) => {
+app.post('/api/playlist/reorder', adminOnly, (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids)) {
     return res.status(400).json({ error: 'Invalid body, expected array of ids' });
@@ -717,7 +857,7 @@ app.post('/api/playlist/reorder', (req, res) => {
 });
 
 // 4. Delete song
-app.delete('/api/playlist/:id', (req, res) => {
+app.delete('/api/playlist/:id', adminOnly, (req, res) => {
   const { id } = req.params;
   let playlist = readDatabase();
   
@@ -775,7 +915,7 @@ app.delete('/api/playlist/:id', (req, res) => {
 });
 
 // 4.5. Update song album
-app.put('/api/playlist/:id/album', (req, res) => {
+app.put('/api/playlist/:id/album', adminOnly, (req, res) => {
   const { id } = req.params;
   let { album } = req.body;
 
@@ -785,14 +925,61 @@ app.put('/api/playlist/:id/album', (req, res) => {
     return res.status(404).json({ error: 'Song not found' });
   }
 
-  if (album && !ALLOWED_ALBUMS.includes(album)) {
-    album = null;
+  if (album) {
+    const albumsList = readAlbumsDatabase();
+    const validAlbumIds = albumsList.map(a => a.id);
+    if (!validAlbumIds.includes(album)) {
+      album = null;
+    }
   }
 
   playlist[songIndex].album = album || null;
   writeDatabase(playlist);
 
   res.json({ success: true, song: playlist[songIndex] });
+});
+
+// 4.6. Get all albums
+app.get('/api/albums', async (req, res) => {
+  if (drive && !isLocalGDriveActive) {
+    await checkAndPullAlbumsFromDrive();
+  }
+  const albums = readAlbumsDatabase();
+  res.json(albums);
+});
+
+// 4.7. Save all albums
+app.post('/api/albums', adminOnly, (req, res) => {
+  const albums = req.body;
+  if (!Array.isArray(albums)) {
+    return res.status(400).json({ error: 'Expected an array of albums' });
+  }
+
+  // Validate album objects
+  for (const album of albums) {
+    if (!album.id || !album.name) {
+      return res.status(400).json({ error: 'Each album must have an id and a name' });
+    }
+  }
+
+  writeAlbumsDatabase(albums);
+
+  // Clean up songs: if a song's album ID is no longer in the list of valid album IDs, set it to null!
+  const validAlbumIds = albums.map(a => a.id);
+  const playlist = readDatabase();
+  let playlistChanged = false;
+  playlist.forEach(song => {
+    if (song.album && !validAlbumIds.includes(song.album)) {
+      song.album = null;
+      playlistChanged = true;
+    }
+  });
+
+  if (playlistChanged) {
+    writeDatabase(playlist);
+  }
+
+  res.json({ success: true, albums });
 });
 
 // 5. Get sharing details (Local network IP & QR Code)
@@ -826,6 +1013,15 @@ app.get('*', (req, res) => {
         console.log('📥 Successfully synchronized database from local G: drive on startup.');
       } catch (err) {
         console.error('Error loading database from local G: drive:', err);
+      }
+    }
+    const gDriveAlbumsPath = path.join(uploadsDir, 'albums.json');
+    if (fs.existsSync(gDriveAlbumsPath)) {
+      try {
+        fs.copyFileSync(gDriveAlbumsPath, albumsPath);
+        console.log('📥 Successfully synchronized albums database from local G: drive on startup.');
+      } catch (err) {
+        console.error('Error loading albums from local G: drive:', err);
       }
     }
   }

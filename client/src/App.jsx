@@ -5,6 +5,7 @@ import ShareModal from './components/ShareModal';
 import Visualizer from './components/Visualizer';
 import ExhaustSmoke from './components/ExhaustSmoke';
 import StartScreen from './components/StartScreen';
+import AlbumModal from './components/AlbumModal';
 import { triggerTactileFeedback } from './utils/tactile';
 import logoImg from './assets/logo.png';
 
@@ -28,6 +29,38 @@ export default function App() {
   const [playedSongIds, setPlayedSongIds] = useState([]);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [playbackAlbum, setPlaybackAlbum] = useState('ALL');
+  const [albums, setAlbums] = useState([]);
+  const [isAlbumModalOpen, setIsAlbumModalOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAdmin = () => {
+      // 1. Check URL query params
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('admin') === '1') {
+        localStorage.setItem('road_dj_admin', 'true');
+        // Clean URL to keep it pretty
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+        return true;
+      }
+
+      // 2. Check localStorage
+      if (localStorage.getItem('road_dj_admin') === 'true') {
+        return true;
+      }
+
+      // 3. Check localhost/loopback
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') {
+        return true;
+      }
+
+      return false;
+    };
+    
+    setIsAdmin(checkAdmin());
+  }, []);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e) => {
@@ -165,19 +198,62 @@ export default function App() {
     }
   };
 
+  const fetchAlbums = async () => {
+    try {
+      const response = await fetch('/api/albums');
+      const data = await response.json();
+      setAlbums(data);
+
+      // If the currently selected album was deleted, fall back to 'ALL'
+      if (activeAlbum !== 'ALL' && !data.some(a => a.id === activeAlbum)) {
+        setActiveAlbum('ALL');
+      }
+    } catch (error) {
+      console.error('Failed to fetch albums:', error);
+    }
+  };
+
+  const handleSaveAlbums = async (updatedAlbums) => {
+    try {
+      const response = await fetch('/api/albums', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin': isAdmin ? 'true' : 'false'
+        },
+        body: JSON.stringify(updatedAlbums)
+      });
+      if (response.ok) {
+        showToast("Альбоми збережено!");
+        await fetchAlbums();
+        await fetchPlaylist(); // Clean up songs belonging to deleted albums
+      } else {
+        const err = await response.json();
+        showToast(err.error || "Помилка збереження альбомів");
+      }
+    } catch (error) {
+      console.error('Failed to save albums:', error);
+      showToast("Помилка мережі при збереженні");
+    }
+  };
+
   useEffect(() => {
     fetchPlaylist();
+    fetchAlbums();
     fetchShareDetails();
 
     // Poll the server every 8 seconds for collaborative syncing & recovery
-    const pollInterval = setInterval(fetchPlaylist, 8000);
+    const pollInterval = setInterval(() => {
+      fetchPlaylist();
+      fetchAlbums();
+    }, 8000);
 
     // Set initial volumes
     audioARef.current.volume = volume;
     audioBRef.current.volume = 0;
 
     return () => clearInterval(pollInterval);
-  }, []);
+  }, [activeAlbum, isAdmin]);
 
   // Gyroscope Accelerometer (Mobile) & cursor tracking parallax mouse listener (Desktop fallback)
   useEffect(() => {
@@ -608,6 +684,9 @@ export default function App() {
     try {
       const response = await fetch(`/api/playlist/${id}`, {
         method: 'DELETE',
+        headers: {
+          'X-Admin': isAdmin ? 'true' : 'false'
+        }
       });
       if (response.ok) {
         showToast("Пісню видалено!");
@@ -637,7 +716,10 @@ export default function App() {
     try {
       const response = await fetch('/api/playlist/reorder', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Admin': isAdmin ? 'true' : 'false'
+        },
         body: JSON.stringify({ ids }),
       });
       if (response.ok) {
@@ -664,7 +746,10 @@ export default function App() {
     try {
       const response = await fetch(`/api/playlist/${id}/album`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Admin': isAdmin ? 'true' : 'false'
+        },
         body: JSON.stringify({ album }),
       });
       if (response.ok) {
@@ -727,6 +812,7 @@ export default function App() {
           showToast={showToast}
           songs={songs} 
           activeAlbum={activeAlbum}
+          isAdmin={isAdmin}
         />
 
         {/* Main Dashboard Control Unit */}
@@ -762,6 +848,9 @@ export default function App() {
           activeAlbum={activeAlbum}
           setActiveAlbum={setActiveAlbum}
           onUpdateSongAlbum={handleUpdateSongAlbum}
+          isAdmin={isAdmin}
+          albums={albums}
+          onOpenAlbumModal={() => setIsAlbumModalOpen(true)}
         />
       </div>
 
@@ -774,6 +863,15 @@ export default function App() {
           setDeferredPrompt={setDeferredPrompt}
         />
       )}
+
+      {/* Album management modal popup */}
+      <AlbumModal 
+        isOpen={isAlbumModalOpen}
+        onClose={() => setIsAlbumModalOpen(false)}
+        albums={albums}
+        songs={songs}
+        onSaveAlbums={handleSaveAlbums}
+      />
 
       {/* Toast popup */}
       {toastMessage && (
