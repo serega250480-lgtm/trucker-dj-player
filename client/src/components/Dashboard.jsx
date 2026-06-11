@@ -20,7 +20,10 @@ export default function Dashboard({
   isShuffle = false,
   onShuffleChange = () => {},
   isFlickerActive = true,
-  onFlickerChange = () => {}
+  onFlickerChange = () => {},
+  isAdmin = false,
+  isForceUpdating = false,
+  onForceUpdate = () => {}
 }) {
   const [rotation, setRotation] = useState(0);
   const lastVolTickRef = useRef(volume);
@@ -547,6 +550,32 @@ export default function Dashboard({
             
             <div className="vintage-toggle-label" style={{ marginTop: '0px' }}>OFF</div>
           </div>
+
+          {/* 5. FORCE UPDATE Switch (Admin Only) */}
+          {isAdmin && (
+            <div className="vintage-toggle-wood">
+              <div className="vintage-toggle-title">FORCE<br/>UPDATE</div>
+              <div className={`vintage-toggle-light ${isForceUpdating ? 'active' : ''}`} />
+              <div className="vintage-toggle-label" style={{ marginTop: '2px' }}>ON</div>
+              
+              <div className="vintage-toggle-base" onClick={() => {
+                if (!isForceUpdating) {
+                  triggerTactileFeedback('switch_on');
+                  onForceUpdate();
+                }
+              }}>
+                <div className="vintage-toggle-hex">
+                  <div className="vintage-toggle-ring-1">
+                    <div className="vintage-toggle-ring-2">
+                      <div className={`vintage-toggle-stalk ${isForceUpdating ? 'on' : 'off'}`} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="vintage-toggle-label" style={{ marginTop: '0px' }}>OFF</div>
+            </div>
+          )}
         </div>
 
       </div>

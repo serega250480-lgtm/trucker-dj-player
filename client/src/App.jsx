@@ -32,6 +32,7 @@ export default function App() {
   const [albums, setAlbums] = useState([]);
   const [isAlbumModalOpen, setIsAlbumModalOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isForceUpdating, setIsForceUpdating] = useState(false);
 
   useEffect(() => {
     const checkAdmin = () => {
@@ -157,11 +158,84 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 2500);
   };
+
+  // Check if server version has changed, unregister PWA SW, and trigger hard reload
+  const checkSystemVersion = (headers) => {
+    const serverVersion = headers.get('X-System-Version');
+    if (serverVersion) {
+      const storedVer = localStorage.getItem('road_dj_system_version');
+      if (!storedVer) {
+        localStorage.setItem('road_dj_system_version', serverVersion);
+      } else if (storedVer !== serverVersion) {
+        console.log(`🚨 System update detected! Old: ${storedVer}, New: ${serverVersion}. Reloading...`);
+        localStorage.setItem('road_dj_system_version', serverVersion);
+        showToast("Систему оновлено! Перезапуск плеєра...");
+        setTimeout(() => {
+          if (navigator.serviceWorker) {
+            navigator.serviceWorker.getRegistrations().then(registrations => {
+              if (registrations.length === 0) {
+                window.location.reload(true);
+              } else {
+                let unregPromises = registrations.map(r => r.unregister());
+                Promise.all(unregPromises).then(() => {
+                  window.location.reload(true);
+                }).catch(() => {
+                  window.location.reload(true);
+                });
+              }
+            }).catch(() => {
+              window.location.reload(true);
+            });
+          } else {
+            window.location.reload(true);
+          }
+        }, 2000);
+      }
+    }
+  };
+
+  // Trigger manual sync check on Google Drive/disk and update system version
+  const handleForceUpdate = async () => {
+    if (isForceUpdating) return;
+    setIsForceUpdating(true);
+    showToast("Перевірка та оновлення системи...");
+    
+    try {
+      const response = await fetch('/api/system/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin': isAdmin ? 'true' : 'false'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        showToast("Синхронізація виконана! Перезапуск...");
+        if (data.systemVersion) {
+          localStorage.setItem('road_dj_system_version', data.systemVersion.toString());
+        }
+        setTimeout(() => {
+          setIsForceUpdating(false);
+          window.location.reload(true);
+        }, 2000);
+      } else {
+        const err = await response.json();
+        showToast(err.error || "Помилка оновлення системи");
+        setIsForceUpdating(false);
+      }
+    } catch (error) {
+      console.error('Failed to trigger update check:', error);
+      showToast("Помилка мережі при оновленні");
+      setIsForceUpdating(false);
+    }
+  };
  
   // Fetch playlist on load with smart change detection
   const fetchPlaylist = async () => {
     try {
       const response = await fetch('/api/playlist');
+      checkSystemVersion(response.headers);
       if (response.ok) {
         const data = await response.json();
         setSongs(prevSongs => {
@@ -836,6 +910,9 @@ export default function App() {
           onShuffleChange={setIsShuffle}
           isFlickerActive={isFlickerActive}
           onFlickerChange={setIsFlickerActive}
+          isAdmin={isAdmin}
+          isForceUpdating={isForceUpdating}
+          onForceUpdate={handleForceUpdate}
         />
 
         {/* Sorted Song Queue */}

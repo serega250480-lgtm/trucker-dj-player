@@ -61,6 +61,25 @@ if (!fs.existsSync(albumsPath)) {
   fs.writeFileSync(albumsPath, JSON.stringify(DEFAULT_ALBUMS, null, 2), 'utf8');
 }
 
+// Persistent system version configuration
+const sysVerPath = path.join(dbDir, 'system_version.json');
+let systemVersion = Date.now();
+if (fs.existsSync(sysVerPath)) {
+  try {
+    const data = JSON.parse(fs.readFileSync(sysVerPath, 'utf8'));
+    if (data.systemVersion) systemVersion = data.systemVersion;
+  } catch (e) {
+    console.error('Error loading system version:', e);
+  }
+}
+
+// Global middleware to set system version header
+app.use((req, res, next) => {
+  res.setHeader('X-System-Version', systemVersion.toString());
+  res.setHeader('Access-Control-Expose-Headers', 'X-System-Version');
+  next();
+});
+
 // Google Drive API State
 let drive = null;
 let driveFolderId = null;
@@ -980,6 +999,52 @@ app.post('/api/albums', adminOnly, (req, res) => {
   }
 
   res.json({ success: true, albums });
+});
+
+// 4.8. Force system update check & reload trigger
+app.post('/api/system/update', adminOnly, async (req, res) => {
+  try {
+    console.log('🔄 Admin triggered system-wide update & sync check...');
+    
+    // 1. Force sync from Google Drive
+    if (drive && !isLocalGDriveActive) {
+      console.log('🔄 Checking Google Drive for playlist/albums updates...');
+      await checkAndPullAlbumsFromDrive();
+      const oldCheckTime = lastDriveCheckTime;
+      lastDriveCheckTime = 0;
+      await checkAndPullDatabaseFromDrive();
+      if (lastDriveCheckTime === 0) {
+        lastDriveCheckTime = oldCheckTime;
+      }
+    } else if (isLocalGDriveActive) {
+      console.log('🔄 Local G: drive mode: reloading database and albums files from disk...');
+      const gDriveDbPath = path.join(uploadsDir, 'playlist.json');
+      if (fs.existsSync(gDriveDbPath)) {
+        fs.copyFileSync(gDriveDbPath, dbPath);
+        console.log('📥 Successfully re-synchronized playlist.json from local G: drive.');
+      }
+      const gDriveAlbumsPath = path.join(uploadsDir, 'albums.json');
+      if (fs.existsSync(gDriveAlbumsPath)) {
+        fs.copyFileSync(gDriveAlbumsPath, albumsPath);
+        console.log('📥 Successfully re-synchronized albums.json from local G: drive.');
+      }
+    }
+
+    // 2. Increment system version to trigger client-side update reload
+    systemVersion = Date.now();
+    
+    fs.writeFileSync(
+      path.join(dbDir, 'system_version.json'),
+      JSON.stringify({ systemVersion }),
+      'utf8'
+    );
+    
+    console.log(`📡 Broadcasted new System Version: ${systemVersion} to all players.`);
+    res.json({ success: true, systemVersion });
+  } catch (err) {
+    console.error('Failed to run manual update check:', err);
+    res.status(500).json({ error: err.message || 'Failed to trigger update check' });
+  }
 });
 
 // 5. Get sharing details (Local network IP & QR Code)
