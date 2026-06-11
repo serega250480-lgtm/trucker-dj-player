@@ -184,6 +184,40 @@ async function initGoogleDrive() {
         console.log('📤 playlist.json not found on Google Drive. Initializing by uploading local database...');
         await syncDatabaseToDrive();
       }
+
+      // Bidirectional sync: check if albums.json exists on Drive
+      console.log('🔄 Checking for albums.json on Google Drive...');
+      const albumsResponse = await drive.files.list({
+        q: `name = 'albums.json' and '${driveFolderId}' in parents and trashed = false`,
+        fields: 'files(id, name)',
+        spaces: 'drive'
+      });
+      const albumsFiles = albumsResponse.data.files;
+
+      if (albumsFiles && albumsFiles.length > 0) {
+        const fileId = albumsFiles[0].id;
+        console.log(`📥 Downloading master albums.json from Google Drive (ID: ${fileId})...`);
+        const dest = fs.createWriteStream(albumsPath);
+        const resStream = await drive.files.get(
+          { fileId: fileId, alt: 'media' },
+          { responseType: 'stream' }
+        );
+        await new Promise((resolve, reject) => {
+          resStream.data
+            .on('end', () => {
+              console.log('📥 Successfully synchronized albums database from Google Drive.');
+              resolve();
+            })
+            .on('error', err => {
+              console.error('❌ Error downloading albums database stream:', err);
+              reject(err);
+            })
+            .pipe(dest);
+        });
+      } else {
+        console.log('📤 albums.json not found on Google Drive. Initializing by uploading local database...');
+        await syncAlbumsToDrive();
+      }
     } else {
       console.log('🔄 Local G: drive is active. Skipping Google Drive API database sync (local client handles it).');
     }
