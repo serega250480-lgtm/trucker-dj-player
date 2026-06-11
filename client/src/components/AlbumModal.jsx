@@ -5,13 +5,14 @@ export default function AlbumModal({ isOpen, onClose, albums, songs, onSaveAlbum
   const [localAlbums, setLocalAlbums] = useState([]);
   const [newAlbumName, setNewAlbumName] = useState('');
 
-  // Sync local state when modal opens or albums prop changes
+  // Sync local state when modal opens
   useEffect(() => {
     if (isOpen) {
       setLocalAlbums(albums.map(album => ({ ...album })));
       setNewAlbumName('');
     }
-  }, [isOpen, albums]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
